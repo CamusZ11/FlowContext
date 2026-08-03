@@ -5,7 +5,6 @@ import {
   isTauriRuntime,
   type TauriInvoke,
 } from "./tauriPlatform";
-import { createBrowserSessionStorage } from "./browserSessionStorage";
 
 function fakeTauriScope() {
   return { __TAURI_INTERNALS__: { invoke: vi.fn() } };
@@ -52,34 +51,35 @@ describe("Tauri platform", () => {
 
   it("stores auth sessions through native secure storage, never browser localStorage", async () => {
     const { invoke, calls } = secureInvoke();
-    const localStorageSet = vi.spyOn(window.localStorage, "setItem");
+    const fallbackSet = vi.fn();
+    const fallbackStorage = {
+      get: () => null,
+      set: fallbackSet,
+      remove: () => undefined,
+      getItem: () => null,
+      setItem: fallbackSet,
+      removeItem: () => undefined,
+    };
     const platform = await createTauriPlatform({
       invoke,
       createDeviceId: () => "device-mac-1",
+      fallbackStorage,
     });
 
     await platform.sessionStorage.set("supabase.session", "secret-session");
-    expect(localStorageSet).not.toHaveBeenCalled();
+    expect(fallbackSet).not.toHaveBeenCalled();
     expect(calls).toContainEqual({
       command: "secure_storage_set",
       args: { key: "supabase.session", value: "secret-session" },
     });
-    localStorageSet.mockRestore();
   });
 
-  it("falls back to browser storage when native secure storage is unavailable", async () => {
-    const values = new Map<string, string>();
-    const browserStorage = createBrowserSessionStorage({
-      getItem: (key) => values.get(key) ?? null,
-      setItem: (key, value) => { values.set(key, value); },
-      removeItem: (key) => { values.delete(key); },
-    }, "flowcontext-fallback");
+  it("keeps sessions in memory when native secure storage is unavailable", async () => {
     const invoke: TauriInvoke = async () => {
       throw new Error("keychain unavailable");
     };
     const platform = await createTauriPlatform({
       invoke,
-      fallbackStorage: browserStorage,
       createDeviceId: () => "device-fallback-1",
     });
 
@@ -87,7 +87,6 @@ describe("Tauri platform", () => {
 
     expect(platform.deviceId).toBe("device-fallback-1");
     expect(await platform.sessionStorage.get("supabase.session")).toBe("secret-session");
-    expect(values.get("flowcontext-fallback:supabase.session")).toBe("secret-session");
   });
 
   it("opens codex links through the validated native command", async () => {

@@ -124,6 +124,7 @@ class FakeRepository implements ApiRepository, TokenLookup {
   readonly tokenRecords = new Map<string, DeviceTokenRecord>();
   readonly seenTokenHashes: string[] = [];
   lastTopicInput: Record<string, unknown> | null = null;
+  lastHandoffInput: HandoffCreate | null = null;
   lastProjectInput: Record<string, unknown> | null = null;
   lastDailyInput: Record<string, unknown> | null = null;
   projectCalls = 0;
@@ -138,12 +139,14 @@ class FakeRepository implements ApiRepository, TokenLookup {
     input: HandoffCreate,
     _principal: Principal,
   ): Promise<{ record: Handoff; created: boolean }> {
+    this.lastHandoffInput = input;
     const existing = this.handoffs.get(input.idempotencyKey);
     if (existing) return { record: existing, created: false };
 
+    const { topicUpdate: _topicUpdate, ...handoff } = input;
     const record: Handoff = {
       id: `handoff-${this.handoffs.size + 1}`,
-      ...input,
+      ...handoff,
       createdAt: "2026-08-03T00:00:00.000Z",
       generatedAt: "2026-08-03T00:00:00.000Z",
     };
@@ -265,6 +268,37 @@ Deno.test("handoff retry returns the original record", async () => {
   assertEquals(first.status, 201);
   assertEquals(second.status, 200);
   assertEquals(await responseJson(first), await responseJson(second));
+});
+
+Deno.test("handoff accepts only safe Topic continuity updates", async () => {
+  const repo = new FakeRepository();
+  const response = await route(
+    handoffRequest({
+      topicUpdate: {
+        currentState: "完成数据库绑定",
+        nextAction: "验证完整写入",
+        openQuestions: ["重试是否保持幂等？"],
+      },
+    }),
+    repo,
+    fixedPrincipal,
+  );
+
+  assertEquals(response.status, 201);
+  assertEquals(repo.lastHandoffInput?.topicUpdate, {
+    currentState: "完成数据库绑定",
+    nextAction: "验证完整写入",
+    openQuestions: ["重试是否保持幂等？"],
+  });
+  assertEquals(await responseJson(response), {
+    id: "handoff-1",
+    sessionId: "session-1",
+    topicCardId: "topic-1",
+    content: "真实 Handoff 正文不应出现在日志中",
+    idempotencyKey: "session-1:sha256",
+    createdAt: "2026-08-03T00:00:00.000Z",
+    generatedAt: "2026-08-03T00:00:00.000Z",
+  });
 });
 
 Deno.test("completion without explicit flag is rejected", async () => {

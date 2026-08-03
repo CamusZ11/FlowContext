@@ -232,14 +232,12 @@ Deno.test("topic writes force owner and never persist state or unknown owner fie
   });
 });
 
-Deno.test("handoff unique conflict returns the original owner-scoped record", async () => {
+Deno.test("handoff idempotency retry returns the original record without a second topic update", async () => {
   const client = new RecordingClient();
-  client.enqueue("maybeSingle", { data: null, error: null });
-  client.enqueue("single", {
-    data: null,
-    error: { code: "23505", message: "duplicate key" },
+  client.enqueue("rpc", {
+    data: { handoff: handoffRow, created: false },
+    error: null,
   });
-  client.enqueue("maybeSingle", { data: handoffRow, error: null });
   const repo = createSupabaseRepository(client);
   const input: HandoffCreate = {
     sessionId: "session-1",
@@ -249,23 +247,55 @@ Deno.test("handoff unique conflict returns the original owner-scoped record", as
   };
 
   const result = await repo.createHandoff(input, fixedPrincipal);
-  const handoffEq = client.calls.filter((call) =>
-    call.kind === "eq" && call.table === "handoffs"
-  );
   assertEquals(result.created, false);
   assertEquals(result.record.id, handoffRow.id);
-  assert(
-    handoffEq.some((call) =>
-      call.kind === "eq" && call.column === "owner_id" &&
-      call.value === fixedPrincipal.ownerId
-    ),
-  );
-  assert(
-    handoffEq.some((call) =>
-      call.kind === "eq" && call.column === "idempotency_key" &&
-      call.value === input.idempotencyKey
-    ),
-  );
+  assertEquals(client.calls.filter((call) => call.kind === "rpc").length, 1);
+  assertEquals(client.calls.some((call) => call.kind === "insert"), false);
+});
+
+Deno.test("handoff creates through the atomic session-topic RPC", async () => {
+  const client = new RecordingClient();
+  client.enqueue("rpc", {
+    data: { handoff: handoffRow, created: true },
+    error: null,
+  });
+  const repo = createSupabaseRepository(client);
+  const input = {
+    sessionId: "session-1",
+    topicCardId: "topic-1",
+    content: "handoff body",
+    idempotencyKey: "session-1:sha256",
+    topicUpdate: {
+      currentState: "已完成原生窗口改动",
+      nextAction: "实机验证全屏覆盖",
+      openQuestions: ["Safari 全屏是否保持 overlay？"],
+    },
+  } as HandoffCreate & {
+    topicUpdate: {
+      currentState: string;
+      nextAction: string;
+      openQuestions: string[];
+    };
+  };
+
+  const result = await repo.createHandoff(input, fixedPrincipal);
+  const rpc = client.calls.find((call) => call.kind === "rpc");
+
+  assertEquals(result.created, true);
+  assertEquals(result.record.id, handoffRow.id);
+  assert(rpc?.kind === "rpc");
+  assertEquals(rpc.functionName, "create_handoff_and_update_topic");
+  assertEquals(rpc.args, {
+    p_owner_id: fixedPrincipal.ownerId,
+    p_session_id: "session-1",
+    p_topic_card_id: "topic-1",
+    p_content: "handoff body",
+    p_idempotency_key: "session-1:sha256",
+    p_current_state: "已完成原生窗口改动",
+    p_next_action: "实机验证全屏覆盖",
+    p_open_questions: ["Safari 全屏是否保持 overlay？"],
+  });
+  assertEquals(client.calls.some((call) => call.kind === "insert"), false);
 });
 
 Deno.test("complete topic checks owner before calling explicit RPC", async () => {

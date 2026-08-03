@@ -26,6 +26,19 @@ pub struct HandoffCreate {
     pub topic_card_id: String,
     pub content: String,
     pub idempotency_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topic_update: Option<HandoffTopicUpdate>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffTopicUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_questions: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

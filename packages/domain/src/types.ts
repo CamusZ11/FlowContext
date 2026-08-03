@@ -53,6 +53,8 @@ export interface HandoffCreate {
   topicCardId: string;
   content: string;
   idempotencyKey: string;
+  /** Only continuity fields may change as part of an immutable Handoff write. */
+  topicUpdate?: Pick<HandoffUpdate, "currentState" | "nextAction" | "openQuestions">;
 }
 
 export interface Todo {

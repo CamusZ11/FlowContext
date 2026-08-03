@@ -230,11 +230,27 @@ function requireDate(value: string): string {
 }
 
 function parseHandoff(body: Record<string, unknown>): HandoffCreate {
+  const topicUpdate = body.topicUpdate;
+  if (topicUpdate !== undefined && !isRecord(topicUpdate)) {
+    throw new ApiError(422, "invalid_topicUpdate");
+  }
+  if (topicUpdate) {
+    optionalString(topicUpdate, "currentState");
+    optionalString(topicUpdate, "nextAction");
+    optionalStringArray(topicUpdate, "openQuestions");
+  }
   return {
     sessionId: requiredString(body, "sessionId"),
     topicCardId: requiredString(body, "topicCardId"),
     content: requiredString(body, "content", true),
     idempotencyKey: requiredString(body, "idempotencyKey"),
+    topicUpdate: topicUpdate
+      ? {
+        currentState: optionalString(topicUpdate, "currentState"),
+        nextAction: optionalString(topicUpdate, "nextAction"),
+        openQuestions: topicUpdate.openQuestions as string[] | undefined,
+      }
+      : undefined,
   };
 }
 

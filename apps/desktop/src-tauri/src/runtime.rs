@@ -350,11 +350,11 @@ impl<R: tauri::Runtime> WindowPort for TauriWindowPort<R> {
     }
 
     fn show(&mut self) -> Result<(), String> {
-        self.window.show().map_err(|error| error.to_string())
+        crate::macos_window::show_fullscreen_overlay(&self.window)
     }
 
     fn hide(&mut self) -> Result<(), String> {
-        self.window.hide().map_err(|error| error.to_string())
+        crate::macos_window::hide_fullscreen_overlay(&self.window)
     }
 
     fn is_visible(&self) -> bool {

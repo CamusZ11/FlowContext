@@ -224,6 +224,79 @@ values
 insert into public.device_tokens (owner_id, device_id, token_hash)
 values ('00000000-0000-0000-0000-000000000001', 'mac-a', repeat('a', 64));
 
+select is(
+  (
+    select public.create_handoff_and_update_topic(
+      '00000000-0000-0000-0000-000000000001',
+      '30000000-0000-0000-0000-000000000001',
+      '20000000-0000-0000-0000-000000000001',
+      'atomic handoff A',
+      'handoff-a-atomic',
+      'atomic current state',
+      'atomic next action',
+      '["atomic question"]'::jsonb
+    )->>'created'
+  ),
+  'true',
+  'atomic Handoff write reports a new immutable record'
+);
+
+select is(
+  (
+    select current_state || '|' || next_action || '|' || open_questions::text
+      from public.topic_cards
+     where id = '20000000-0000-0000-0000-000000000001'
+  ),
+  'atomic current state|atomic next action|["atomic question"]',
+  'atomic Handoff write updates only the Topic continuity fields'
+);
+
+select is(
+  (
+    select public.create_handoff_and_update_topic(
+      '00000000-0000-0000-0000-000000000001',
+      '30000000-0000-0000-0000-000000000001',
+      '20000000-0000-0000-0000-000000000001',
+      'atomic handoff A',
+      'handoff-a-atomic',
+      'must not replace state on retry',
+      'must not replace next action on retry',
+      '[]'::jsonb
+    )->>'created'
+  ),
+  'false',
+  'Handoff retry is idempotent and does not create a second record'
+);
+
+select is(
+  (
+    select count(*)::text
+      from public.handoffs
+     where owner_id = '00000000-0000-0000-0000-000000000001'
+       and idempotency_key = 'handoff-a-atomic'
+  ),
+  '1',
+  'atomic Handoff retry retains one immutable record'
+);
+
+select throws_ok(
+  $$
+    select public.create_handoff_and_update_topic(
+      '00000000-0000-0000-0000-000000000001',
+      '30000000-0000-0000-0000-000000000001',
+      '20000000-0000-0000-0000-000000000002',
+      'invalid binding',
+      'invalid-binding',
+      null,
+      null,
+      null
+    )
+  $$,
+  '23503',
+  'session is not bound to topic card',
+  'atomic Handoff rejects a Topic not bound to the Session'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -231,7 +304,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 select is((select count(*)::text from public.project_projections), '2', 'authenticated sees only the owner project projections');
 select is((select count(*)::text from public.topic_cards), '2', 'authenticated sees only the owner topic cards');
 select is((select count(*)::text from public.sessions), '1', 'authenticated sees only the owner session');
-select is((select count(*)::text from public.handoffs), '1', 'authenticated sees only the owner handoff');
+select is((select count(*)::text from public.handoffs), '2', 'authenticated sees only the owner handoffs');
 select is((select count(*)::text from public.todos), '2', 'authenticated sees only the owner todos');
 select is((select count(*)::text from public.daily_projections), '1', 'authenticated sees only the owner daily projection');
 select is((select count(*)::text from public.device_workspaces), '1', 'authenticated sees only the owner workspace');

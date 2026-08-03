@@ -2,5 +2,10 @@
   "sessionId": "session-fixture",
   "topicCardId": "topic-fixture",
   "content": "已完成投影同步测试；下一步进行真实设备验证。",
-  "idempotencyKey": "session-fixture:handoff:2026-08-02"
+  "idempotencyKey": "session-fixture:handoff:2026-08-02",
+  "topicUpdate": {
+    "currentState": "已完成投影同步测试",
+    "nextAction": "进行真实设备验证",
+    "openQuestions": ["全屏浮窗是否保持在当前 Space？"]
+  }
 }

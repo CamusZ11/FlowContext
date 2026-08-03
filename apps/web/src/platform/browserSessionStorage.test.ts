@@ -16,4 +16,11 @@ describe("browser session storage", () => {
     storage.removeItem("auth-token");
     expect(storage.get("auth-token")).toBeNull();
   });
+
+  it("treats an invalid browser storage object as unavailable", () => {
+    const storage = createBrowserSessionStorage({} as unknown as Storage);
+
+    expect(storage.get("device-id")).toBeNull();
+    expect(() => storage.set("device-id", "device-1")).not.toThrow();
+  });
 });

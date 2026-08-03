@@ -1,5 +1,4 @@
 import type { PlatformPort, SessionStoragePort } from "./PlatformPort";
-import { createBrowserSessionStorage } from "./browserSessionStorage";
 import { webPlatform } from "./webPlatform";
 
 export interface TauriInvoke {
@@ -63,52 +62,11 @@ function createMemorySessionStorage(): SessionStoragePort {
 
 /**
  * The native keychain is preferred, but a locked/unavailable login keychain
- * must not prevent the desktop UI from starting. Keep the browser fallback
- * namespaced and retain an in-memory last resort if localStorage is blocked.
+ * must not prevent the desktop UI from starting. Session material never falls
+ * back to WebView localStorage, so the only fallback is process memory.
  */
 function createFallbackSessionStorage(): SessionStoragePort {
-  const memory = createMemorySessionStorage();
-  let browserStorage: ReturnType<typeof createBrowserSessionStorage> | null = null;
-  try {
-    browserStorage = createBrowserSessionStorage();
-  } catch {
-    // WebView localStorage can be unavailable under restrictive profiles.
-  }
-
-  const get = (key: string) => {
-    if (browserStorage) {
-      try {
-        const value = browserStorage.get(key);
-        if (value !== null) return value;
-      } catch {
-        browserStorage = null;
-      }
-    }
-    return memory.get(key);
-  };
-  const set = (key: string, value: string) => {
-    if (browserStorage) {
-      try {
-        browserStorage.set(key, value);
-        return;
-      } catch {
-        browserStorage = null;
-      }
-    }
-    memory.set(key, value);
-  };
-  const remove = (key: string) => {
-    if (browserStorage) {
-      try {
-        browserStorage.remove(key);
-        return;
-      } catch {
-        browserStorage = null;
-      }
-    }
-    memory.remove(key);
-  };
-  return { get, set, remove, getItem: get, setItem: set, removeItem: remove };
+  return createMemorySessionStorage();
 }
 
 export function createTauriSessionStorage(

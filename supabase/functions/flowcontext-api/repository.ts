@@ -167,39 +167,25 @@ export class SupabaseApiRepository implements ApiRepository {
     input: HandoffCreate,
     principal: Principal,
   ): Promise<HandoffCreateResult> {
-    const existing = await this.findHandoffByKey(
-      input.idempotencyKey,
-      principal,
-    );
-    if (existing) return { record: existing, created: false };
-
-    const payload = {
-      owner_id: principal.ownerId,
-      session_id: input.sessionId,
-      topic_card_id: input.topicCardId,
-      content: input.content,
-      idempotency_key: input.idempotencyKey,
+    const result = await this.client.rpc("create_handoff_and_update_topic", {
+      p_owner_id: principal.ownerId,
+      p_session_id: input.sessionId,
+      p_topic_card_id: input.topicCardId,
+      p_content: input.content,
+      p_idempotency_key: input.idempotencyKey,
+      p_current_state: input.topicUpdate?.currentState ?? null,
+      p_next_action: input.topicUpdate?.nextAction ?? null,
+      p_open_questions: input.topicUpdate?.openQuestions ?? null,
+    });
+    if (result.error) throw mapRepositoryError(result.error, "handoff_create");
+    const payload = unwrapRpc(result.data, "handoff_create");
+    if (typeof payload.created !== "boolean") {
+      throw new ApiError(502, "handoff_create");
+    }
+    return {
+      record: mapHandoff(unwrapData(payload.handoff, "handoff_create")),
+      created: payload.created,
     };
-    const inserted = await this.client
-      .from("handoffs")
-      .insert(payload)
-      .select("*")
-      .single<HandoffRow>();
-    if (!inserted.error) {
-      return {
-        record: mapHandoff(unwrapData(inserted.data, "handoff_create")),
-        created: true,
-      };
-    }
-
-    if (inserted.error.code !== "23505") {
-      throw mapRepositoryError(inserted.error, "handoff_create");
-    }
-
-    // Another request won the unique (owner_id, idempotency_key) race.
-    const raced = await this.findHandoffByKey(input.idempotencyKey, principal);
-    if (raced) return { record: raced, created: false };
-    throw new ApiError(409, "idempotency_conflict");
   }
 
   async completeTopic(
@@ -296,19 +282,6 @@ export class SupabaseApiRepository implements ApiRepository {
     return mapWorkspace(unwrapSingle(result, "device_workspace_upsert"));
   }
 
-  private async findHandoffByKey(
-    idempotencyKey: string,
-    principal: Principal,
-  ): Promise<Handoff | null> {
-    const result = await this.client
-      .from("handoffs")
-      .select("*")
-      .eq("owner_id", principal.ownerId)
-      .eq("idempotency_key", idempotencyKey)
-      .maybeSingle<HandoffRow>();
-    const row = unwrapMaybe(result, "handoff_lookup");
-    return row ? mapHandoff(row) : null;
-  }
 }
 
 export function createSupabaseRepository(

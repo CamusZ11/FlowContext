@@ -1,4 +1,4 @@
-use flowcontext_cli::client::{FlowContextClient, HandoffCreate};
+use flowcontext_cli::client::{FlowContextClient, HandoffCreate, HandoffTopicUpdate};
 use reqwest::Client as HttpClient;
 use secrecy::SecretString;
 use serde_json::json;
@@ -15,7 +15,12 @@ async fn handoff_sends_idempotency_key_without_logging_content() {
             "sessionId": "s1",
             "topicCardId": "t1",
             "content": "handoff",
-            "idempotencyKey": "s1:abc"
+            "idempotencyKey": "s1:abc",
+            "topicUpdate": {
+                "currentState": "完成窗口改动",
+                "nextAction": "验证全屏覆盖",
+                "openQuestions": ["是否保持当前 Space？"]
+            }
         })))
         .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "h1" })))
         .mount(&server)
@@ -34,6 +39,11 @@ async fn handoff_sends_idempotency_key_without_logging_content() {
             topic_card_id: "t1".into(),
             content: "handoff".into(),
             idempotency_key: "s1:abc".into(),
+            topic_update: Some(HandoffTopicUpdate {
+                current_state: Some("完成窗口改动".into()),
+                next_action: Some("验证全屏覆盖".into()),
+                open_questions: Some(vec!["是否保持当前 Space？".into()]),
+            }),
         })
         .await
         .unwrap();
@@ -56,6 +66,7 @@ async fn failed_response_does_not_include_response_body_in_error() {
             topic_card_id: "t1".into(),
             content: "secret".into(),
             idempotency_key: "s1:abc".into(),
+            topic_update: None,
         })
         .await
         .unwrap_err()

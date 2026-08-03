@@ -6,6 +6,7 @@
 - 不写入 Secret、Token、Supabase 实际 Key 或个人凭据；只提交示例配置
 - 不增加本地业务 SQLite；本机只保存设备偏好与登录会话
 - 第一版暂不处理备份、签名、公证和自动更新
+- 调试或验收 macOS 原生浮窗、热区、全屏 Space 或不抢焦点行为时，必须使用 `$macos-desktop-overlay-validation`，把自动化、构建、运行和实机矩阵分开记录
 ## 目录职责
 - `apps/`：共享 Web 前端与 Tauri 桌面应用
 - `packages/`：领域模型、数据访问与 Daily Note 投影
