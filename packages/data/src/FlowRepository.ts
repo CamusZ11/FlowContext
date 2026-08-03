@@ -1,0 +1,35 @@
+import type {
+  DailyProjection,
+  DeviceWorkspace,
+  Handoff,
+  Session,
+  Todo,
+  TodoCreate,
+  TodoPatch,
+  TopicCard,
+} from "@flowcontext/domain";
+
+export interface TopicContext {
+  topic: TopicCard;
+  latestSession: Session | null;
+  latestHandoff: Handoff | null;
+  currentWorkspace: DeviceWorkspace | null;
+}
+
+export type TodoListener = (todos: Todo[]) => void;
+export type TodoSubscriptionCleanup = () => void;
+
+/**
+ * Stable frontend data port. Supabase and any replacement backend stay behind
+ * this interface; UI code only sees domain values.
+ */
+export interface FlowRepository {
+  listTodos(date: string): Promise<Todo[]>;
+  createTodo(input: TodoCreate): Promise<Todo>;
+  updateTodo(id: string, patch: TodoPatch): Promise<Todo>;
+  deleteTodo(id: string): Promise<void>;
+  subscribeTodos(date: string, listener: TodoListener): TodoSubscriptionCleanup;
+  listSuggestedTopics(limit: number): Promise<TopicCard[]>;
+  getTopicContext(topicId: string, deviceId?: string): Promise<TopicContext | null>;
+  getDailyProjection(date: string): Promise<DailyProjection | null>;
+}

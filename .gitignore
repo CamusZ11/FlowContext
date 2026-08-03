@@ -1,0 +1,13 @@
+.contract-runtime/
+.superpowers/
+node_modules/
+dist/
+target/
+apps/desktop/src-tauri/gen/
+coverage/
+.turbo/
+.env
+.env.*
+!.env.example
+supabase/.branches/
+supabase/.temp/

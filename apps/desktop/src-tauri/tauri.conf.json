@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FlowContext",
+  "version": "0.1.0",
+  "identifier": "com.camus.flowcontext",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @flowcontext/web dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm --filter @flowcontext/web build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "FlowContext",
+        "width": 420,
+        "minWidth": 360,
+        "maxWidth": 560,
+        "height": 900,
+        "visible": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": true,
+        "transparent": true,
+        "shadow": true,
+        "focus": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' https: wss: http://localhost:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "A fast personal work context overlay",
+    "longDescription": "FlowContext keeps today's tasks and the current Codex context one edge gesture away."
+  }
+}
