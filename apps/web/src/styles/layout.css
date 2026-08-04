@@ -31,7 +31,7 @@ button[type="submit"] { background: var(--accent); border-color: var(--accent); 
 
 .flowcontext-app { position: relative; width: min(100%, 40rem); min-height: 100vh; margin: 0 auto; }
 .flowcontext-app[data-mode="desktop"] {
-  width: auto; min-height: calc(100% - (var(--desktop-shell-inset-y) * 2)); margin: var(--desktop-shell-inset-y) var(--desktop-shell-inset-x); padding: var(--desktop-shell-padding-top) var(--desktop-shell-padding-x) var(--desktop-shell-padding-bottom); overflow-y: auto; overscroll-behavior: contain;
+  width: auto; height: calc(100vh - (var(--desktop-shell-inset-y) * 2)); min-height: 0; margin: var(--desktop-shell-inset-y) var(--desktop-shell-inset-x); padding: var(--desktop-shell-padding-top) var(--desktop-shell-padding-x) var(--desktop-shell-padding-bottom); overflow-y: auto; overscroll-behavior: contain;
   isolation: isolate; z-index: 0; border: 1px solid var(--desktop-shell-border); border-radius: var(--desktop-shell-radius); background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 .flowcontext-app[data-mode="desktop"]::before { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; background: url("../assets/desktop-shell-background.png") center / cover no-repeat; opacity: var(--desktop-shell-background-opacity); pointer-events: none; }

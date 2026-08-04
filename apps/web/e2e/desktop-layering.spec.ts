@@ -42,6 +42,7 @@ test("desktop shell provides a translucent rounded frame with spacing around its
   const todoBox = await todo.boundingBox();
   expect(shellBox).not.toBeNull();
   expect(todoBox).not.toBeNull();
+  expect(Math.round(shellBox!.height)).toBe(868);
   expect(420 - (shellBox!.x + shellBox!.width)).toBeGreaterThanOrEqual(24);
   expect(todoBox!.x - shellBox!.x).toBeGreaterThanOrEqual(10);
   expect(alpha(todoStyle.background)).toBeGreaterThan(alpha(dailyStyle.background));

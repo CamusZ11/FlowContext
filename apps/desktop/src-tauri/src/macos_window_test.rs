@@ -54,6 +54,7 @@ fn fullscreen_overlay_panel_profile_is_nonactivating_and_above_fullscreen_conten
     let profile = fullscreen_overlay_panel_profile();
 
     assert!(profile.nonactivating);
+    assert!(profile.transparent);
     assert!(profile.floating);
     assert!(!profile.hides_on_deactivate);
     assert!(profile.becomes_key_only_if_needed);

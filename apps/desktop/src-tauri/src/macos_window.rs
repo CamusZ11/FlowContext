@@ -69,6 +69,7 @@ pub fn fullscreen_overlay_behavior(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FullscreenOverlayPanelProfile {
     pub nonactivating: bool,
+    pub transparent: bool,
     pub floating: bool,
     pub hides_on_deactivate: bool,
     pub becomes_key_only_if_needed: bool,
@@ -80,6 +81,7 @@ pub struct FullscreenOverlayPanelProfile {
 pub fn fullscreen_overlay_panel_profile() -> FullscreenOverlayPanelProfile {
     FullscreenOverlayPanelProfile {
         nonactivating: true,
+        transparent: true,
         floating: true,
         hides_on_deactivate: false,
         becomes_key_only_if_needed: true,
@@ -102,6 +104,7 @@ panel!(FlowContextPanel {
 pub struct NativeOverlaySnapshot {
     pub native_class: String,
     pub is_panel: bool,
+    pub opaque: bool,
     pub collection_behavior_bits: usize,
     pub level: isize,
     pub visible: bool,
@@ -143,6 +146,7 @@ fn snapshot_fullscreen_overlay<R: tauri::Runtime>(
         Ok(NativeOverlaySnapshot {
             native_class: native.class().name().to_string_lossy().into_owned(),
             is_panel: native.isKindOfClass(NSPanel::class()),
+            opaque: native.isOpaque(),
             collection_behavior_bits: native.collectionBehavior().bits(),
             level: native.level(),
             visible: native.isVisible(),
@@ -190,6 +194,8 @@ fn configure_fullscreen_overlay_panel<R: tauri::Runtime>(
             .nonactivating_panel()
             .into(),
     );
+    panel.set_transparent(profile.transparent);
+    panel.set_has_shadow(false);
     panel.set_floating_panel(profile.floating);
     panel.set_hides_on_deactivate(profile.hides_on_deactivate);
     panel.set_becomes_key_only_if_needed(profile.becomes_key_only_if_needed);
@@ -207,6 +213,9 @@ fn validate_fullscreen_overlay_panel<R: tauri::Runtime>(
     let behavior = native.collectionBehavior();
     if !native.isKindOfClass(NSPanel::class()) {
         return Err("FlowContext overlay is not an NSPanel after conversion".to_owned());
+    }
+    if profile.transparent && native.isOpaque() {
+        return Err("FlowContext overlay remains opaque after NSPanel conversion".to_owned());
     }
     if !native
         .styleMask()
