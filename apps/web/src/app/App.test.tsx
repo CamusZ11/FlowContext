@@ -20,6 +20,7 @@ describe("App shell", () => {
     const headings = screen.getAllByRole("heading").map((node) => node.textContent);
     expect(headings).toEqual(expect.arrayContaining(["今日待办", "建议继续", "Daily Lens"]));
     expect(screen.queryByRole("heading", { name: "今天，继续推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /关闭|收起 FlowContext/ })).not.toBeInTheDocument();
     expect(screen.getByTestId("connection-status").closest(".brand-row")).toBe(container.querySelector(".brand-row"));
     expect(screen.getByTestId("flowcontext-mark")).toBeInTheDocument();
     expect(screen.getByTestId("synced-mark")).toBeInTheDocument();

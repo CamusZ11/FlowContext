@@ -4,7 +4,7 @@ import {
   HttpFlowRepository,
   SupabaseFlowRepository,
 } from "@flowcontext/data";
-import type { Todo, TodoCreate, TodoPatch } from "@flowcontext/domain";
+import type { Todo, TodoCreate, TodoPatch, TopicCard } from "@flowcontext/domain";
 import { App } from "./app/App";
 import {
   createHttpAuth,
@@ -17,7 +17,7 @@ import { getBootstrapErrorDetail, type BootstrapErrorKind } from "./bootstrapMes
 import "./styles/tokens.css";
 import "./styles/layout.css";
 
-function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false): FlowRepository {
+function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics: TopicCard[] = []): FlowRepository {
   let nextId = 1;
   let todos = [...seed];
   const listeners = new Set<(date: string) => void>();
@@ -52,8 +52,11 @@ function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false): FlowR
       listeners.add(callback);
       return () => listeners.delete(callback);
     },
-    listSuggestedTopics: async () => [],
-    getTopicContext: async () => null,
+    listSuggestedTopics: async () => topics,
+    getTopicContext: async (topicId) => {
+      const topic = topics.find((value) => value.id === topicId);
+      return topic ? { topic, latestSession: null, latestHandoff: null, currentWorkspace: null } : null;
+    },
     getDailyProjection: async () => null,
   };
 }
@@ -108,15 +111,27 @@ async function bootstrap() {
   // used by Playwright; a production bundle can never bypass the real
   // AuthGate. Real provider selection happens only after this E2E branch.
   const e2eMode = platform.mode === "web" && import.meta.env.DEV ? params.get("e2e") : null;
-  if (e2eMode === "1" || e2eMode === "network-failure") {
+  if (e2eMode === "1" || e2eMode === "network-failure" || e2eMode === "desktop-density") {
     const today = platform.today();
-    const seed: Todo[] = e2eMode === "network-failure"
+    const seed: Todo[] = e2eMode === "desktop-density"
+      ? [
+        { id: "timed", title: "制作三分钟内口播脚本 Skill", plannedDate: today, plannedTime: "09:30", isCompleted: false, projectId: null, topicCardId: null },
+        { id: "long", title: "这是一个用于验证紧凑桌面待办行省略行为的超长任务标题，不应挤压右侧操作按钮", plannedDate: today, plannedTime: null, isCompleted: false, projectId: null, topicCardId: null },
+        { id: "untimed", title: "申请并落实 AI 资源", plannedDate: today, plannedTime: null, isCompleted: false, projectId: null, topicCardId: null },
+        { id: "done-1", title: "刷新全部 Power BI 报表", plannedDate: today, plannedTime: null, isCompleted: true, projectId: null, topicCardId: null },
+        { id: "done-2", title: "研究起标题 Skills", plannedDate: today, plannedTime: null, isCompleted: true, projectId: null, topicCardId: null },
+        { id: "done-3", title: "排好今天的口播", plannedDate: today, plannedTime: null, isCompleted: true, projectId: null, topicCardId: null },
+      ]
+      : e2eMode === "network-failure"
       ? [{ id: "morning", title: "上午任务", plannedDate: today, plannedTime: "09:00", isCompleted: false, projectId: null, topicCardId: null }]
+      : [];
+    const topics: TopicCard[] = e2eMode === "desktop-density"
+      ? [{ id: "density-topic", projectId: "flowcontext", title: "Handoff 云端绑定与写入", state: "open", currentState: "Handoff 原子写入已完成，等待 macOS 实机验收。", nextAction: "在 macOS 原生全屏应用中验证热区唤出。", openQuestions: [], lastActiveAt: "2026-08-04T12:00:00.000Z", focusRank: 1 }]
       : [];
     createRoot(root).render(
       <App
-        mode={platform.mode}
-        repository={createMemoryRepository(seed, e2eMode === "network-failure")}
+        mode={e2eMode === "desktop-density" ? "desktop" : platform.mode}
+        repository={createMemoryRepository(seed, e2eMode === "network-failure", topics)}
         platform={platform}
         auth={createE2eAuth()}
       />,

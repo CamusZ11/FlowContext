@@ -6,6 +6,11 @@ export default defineConfig({
   // plugin-react and vitest may resolve separate Vite peer copies in a pnpm
   // workspace; the plugin contract is identical at runtime.
   plugins: [react() as unknown as PluginOption],
+  build: {
+    // Tauri's custom protocol can miss standalone image requests in a transparent
+    // WebView. Keep the reference background inside the compiled stylesheet.
+    assetsInlineLimit: 1_500_000,
+  },
   test: {
     environment: "jsdom",
     globals: true,

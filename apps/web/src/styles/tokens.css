@@ -25,6 +25,30 @@
   --shadow-card: var(--shadow);
   --focus-ring: 0 0 0 3px rgb(58 113 172 / 22%);
   --transition-fast: 140ms ease;
+  --desktop-shell-inset-x: 26px;
+  --desktop-shell-inset-y: 16px;
+  --desktop-shell-padding-x: 10px;
+  --desktop-shell-padding-top: 12px;
+  --desktop-shell-padding-bottom: 18px;
+  --desktop-shell-radius: 28px;
+  --desktop-shell-border: rgb(255 255 255 / 74%);
+  --desktop-shell-background-opacity: 0.65;
+  --desktop-primary-card-radius: 20px;
+  --desktop-secondary-card-radius: 16px;
+  --desktop-primary-card-bg: rgb(255 255 255 / 82%);
+  --desktop-secondary-card-bg: rgb(255 255 255 / 62%);
+  --desktop-primary-card-border: rgb(255 255 255 / 76%);
+  --desktop-secondary-card-border: rgb(255 255 255 / 48%);
+  --desktop-primary-card-shadow: 0 10px 28px rgb(36 62 94 / 7%), inset 0 1px 0 rgb(255 255 255 / 82%);
+  --desktop-secondary-card-shadow: 0 6px 18px rgb(36 62 94 / 4%), inset 0 1px 0 rgb(255 255 255 / 74%);
+  --desktop-section-gap: 12px;
+  --desktop-section-padding: 14px;
+  --desktop-row-height: 42px;
+  --desktop-control-height: 40px;
+  --desktop-icon-button-size: 30px;
+  --desktop-font-section: 18px;
+  --desktop-font-body: 14px;
+  --desktop-font-secondary: 13px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 

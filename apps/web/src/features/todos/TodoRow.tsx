@@ -66,7 +66,7 @@ export function TodoRow({ todo, onUpdate, onDelete, disabled = false }: TodoRowP
             autoFocus
           />
         ) : (
-          <span className={`todo-title${todo.isCompleted ? " completed" : ""}`}>{todo.title}</span>
+          <span className={`todo-title${todo.isCompleted ? " completed" : ""}`} title={todo.title}>{todo.title}</span>
         )}
         {todo.plannedTime ? <time dateTime={todo.plannedTime}>{todo.plannedTime}</time> : null}
       </div>
