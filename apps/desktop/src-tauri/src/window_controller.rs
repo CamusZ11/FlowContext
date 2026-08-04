@@ -26,6 +26,8 @@ pub struct WindowController {
 }
 
 impl WindowController {
+    const TOP_SAFE_INSET_POINTS: f64 = 28.0;
+
     pub const fn new(saved_width: f64, min_width: f64, max_width: f64) -> Self {
         Self {
             saved_width,
@@ -50,9 +52,10 @@ impl WindowController {
     ) -> Result<(), WindowControllerError> {
         let scale = monitor.scale_factor.max(0.0001);
         let width = self.width() * scale;
-        let height = monitor.height;
+        let top_inset = Self::TOP_SAFE_INSET_POINTS * scale;
+        let height = (monitor.height - top_inset).max(1.0);
         let x = monitor.right() - width;
-        let y = monitor.y;
+        let y = monitor.y + top_inset;
         window
             .set_physical_size(width, height)
             .and_then(|_| window.set_physical_position(x, y))

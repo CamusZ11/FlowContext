@@ -89,6 +89,41 @@ describe("Tauri platform", () => {
     expect(await platform.sessionStorage.get("supabase.session")).toBe("secret-session");
   });
 
+  it("persists a session after a temporary Keychain failure during startup", async () => {
+    const values = new Map<string, string>();
+    let failNextGet = true;
+    const invoke: TauriInvoke = async (command, args) => {
+      const key = String(args?.key ?? "");
+      if (command === "secure_storage_get" && failNextGet) {
+        failNextGet = false;
+        throw new Error("keychain is temporarily unavailable");
+      }
+      if (command === "secure_storage_get") return values.get(key) ?? null;
+      if (command === "secure_storage_set") {
+        values.set(key, String(args?.value ?? ""));
+        return null;
+      }
+      if (command === "secure_storage_remove") {
+        values.delete(key);
+        return null;
+      }
+      return null;
+    };
+
+    const firstLaunch = await createTauriPlatform({
+      invoke,
+      createDeviceId: () => "device-mac-1",
+    });
+    await firstLaunch.sessionStorage.set("supabase.session", "persistent-session");
+
+    const restartedLaunch = await createTauriPlatform({
+      invoke,
+      createDeviceId: () => "device-mac-2",
+    });
+
+    expect(await restartedLaunch.sessionStorage.get("supabase.session")).toBe("persistent-session");
+  });
+
   it("opens codex links through the validated native command", async () => {
     const { invoke, calls } = secureInvoke();
     const platform = await createTauriPlatform({

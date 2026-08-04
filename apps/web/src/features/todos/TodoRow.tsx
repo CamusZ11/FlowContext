@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Todo, TodoPatch } from "@flowcontext/domain";
+import { PencilIcon, TrashIcon } from "../../ui/icons";
 
 export interface TodoRowProps {
   todo: Todo;
@@ -70,11 +71,11 @@ export function TodoRow({ todo, onUpdate, onDelete, disabled = false }: TodoRowP
         {todo.plannedTime ? <time dateTime={todo.plannedTime}>{todo.plannedTime}</time> : null}
       </div>
       <div className="todo-row-actions">
-        <button type="button" aria-label={`编辑 ${todo.title}`} onClick={() => setEditing(true)} disabled={disabled || busy}>
-          编辑
+        <button type="button" data-icon-button="true" aria-label={`编辑 ${todo.title}`} onClick={() => setEditing(true)} disabled={disabled || busy}>
+          <PencilIcon width="18" height="18" />
         </button>
-        <button type="button" aria-label={`删除 ${todo.title}`} onClick={() => void remove()} disabled={disabled || busy}>
-          删除
+        <button type="button" data-icon-button="true" aria-label={`删除 ${todo.title}`} onClick={() => void remove()} disabled={disabled || busy}>
+          <TrashIcon width="18" height="18" />
         </button>
       </div>
       {error ? <p role="alert" className="error-text">{error}</p> : null}

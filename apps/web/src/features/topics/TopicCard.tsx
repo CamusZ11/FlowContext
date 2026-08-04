@@ -1,5 +1,6 @@
 import type { DeviceWorkspace, TopicCard as TopicCardType } from "@flowcontext/domain";
 import { buildCodexLink, topicNeedsWorkspace, type TopicLinkInput } from "./buildCodexLink";
+import { ArrowRightIcon, CheckIcon } from "../../ui/icons";
 
 export interface TopicCardProps {
   topic: TopicLinkInput | TopicCardType;
@@ -19,7 +20,7 @@ export function TopicCardView({ topic, currentWorkspace = null, onOpen }: TopicC
         <p className="eyebrow">TOPIC</p>
         <h3>{topic.title}</h3>
         <p className="topic-state">{topic.currentState || "尚未记录当前状态"}</p>
-        {topic.nextAction ? <p className="topic-next"><strong>下一步：</strong>{topic.nextAction}</p> : null}
+        {topic.nextAction ? <p className="topic-next"><CheckIcon width="18" height="18" /><span><strong>下一步：</strong>{topic.nextAction}</span></p> : null}
       </div>
       {missingWorkspace ? <p className="muted">先配置此设备项目路径</p> : null}
       <button
@@ -27,7 +28,7 @@ export function TopicCardView({ topic, currentWorkspace = null, onOpen }: TopicC
         disabled={disabled}
         onClick={() => { if (link) void onOpen(link); }}
       >
-        {link?.startsWith("codex://threads/") ? "打开当前任务" : "继续此主题"}
+        <span>{link?.startsWith("codex://threads/") ? "打开当前任务" : "继续此主题"}</span><ArrowRightIcon width="18" height="18" />
       </button>
     </article>
   );

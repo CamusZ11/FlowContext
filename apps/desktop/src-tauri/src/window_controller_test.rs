@@ -80,14 +80,14 @@ fn monitor(x: f64, y: f64, width: f64, height: f64) -> MonitorRect {
 }
 
 #[test]
-fn show_places_panel_at_selected_monitor_right_edge() {
+fn show_places_panel_below_selected_monitor_menu_bar_at_right_edge() {
     let mut window = FakeWindow::new();
     let controller = WindowController::new(420.0, 360.0, 560.0);
     controller
         .show(&mut window, monitor(0.0, 0.0, 1920.0, 1080.0))
         .unwrap();
-    assert_eq!(window.physical_size(), (420.0, 1080.0));
-    assert_eq!(window.physical_position(), (1500.0, 0.0));
+    assert_eq!(window.physical_size(), (420.0, 1052.0));
+    assert_eq!(window.physical_position(), (1500.0, 28.0));
     assert!(window.visible());
     assert!(window.always_on_top);
     assert!(window.overlay_prepared);
@@ -151,8 +151,8 @@ fn show_clamps_saved_width_and_converts_dpi_coordinates() {
             MonitorRect::new(-2560.0, -100.0, 2560.0, 1440.0, 1.5),
         )
         .unwrap();
-    assert_eq!(window.physical_size(), (840.0, 1440.0));
-    assert_eq!(window.physical_position(), (-840.0, -100.0));
+    assert_eq!(window.physical_size(), (840.0, 1398.0));
+    assert_eq!(window.physical_position(), (-840.0, -58.0));
 }
 
 #[test]

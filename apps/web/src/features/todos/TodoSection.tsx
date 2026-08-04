@@ -4,7 +4,8 @@ import { CompletedTodos } from "./CompletedTodos";
 import { TodoForm } from "./TodoForm";
 import { TodoRow } from "./TodoRow";
 import { useTodoMutations, useTodos } from "./useTodos";
-import "./todo.module.css";
+import { SunIcon } from "../../ui/icons";
+import "./todo.css";
 
 export interface TodoSectionProps {
   date: string;
@@ -33,8 +34,8 @@ export function TodoSection({ date }: TodoSectionProps) {
     <section aria-labelledby="todo-heading" className="content-section todo-section">
       <div className="section-heading-row">
         <div>
-          <p className="eyebrow">{platform.mode === "desktop" ? "TODAY" : date}</p>
-          <h2 id="todo-heading">To-do</h2>
+          {platform.mode === "web" ? <p className="eyebrow">{date}</p> : null}
+          <div className="section-title-with-icon"><SunIcon width="23" height="23" /><h2 id="todo-heading">今日待办</h2></div>
         </div>
         <span className="section-count">{todos.length}</span>
       </div>

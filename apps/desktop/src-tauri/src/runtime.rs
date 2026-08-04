@@ -57,19 +57,29 @@ impl SamplingRuntime {
         let worker = thread::Builder::new()
             .name("flowcontext-hot-zone".to_owned())
             .spawn(move || {
+                let mut last_sample_error = None;
                 while !stop_worker.load(Ordering::Acquire) {
-                    if let Ok(sample) = port.sample() {
-                        let actions = engine.sample(
-                            sample.now_ms,
-                            sample.cursor,
-                            sample.monitor,
-                            sample.window,
-                        );
-                        for action in actions {
-                            let context = format!("hot-zone {action:?} action");
-                            report_runtime_result(&context, port.apply(action), |message| {
-                                eprintln!("{message}");
-                            });
+                    match port.sample() {
+                        Ok(sample) => {
+                            last_sample_error = None;
+                            let actions = engine.sample(
+                                sample.now_ms,
+                                sample.cursor,
+                                sample.monitor,
+                                sample.window,
+                            );
+                            for action in actions {
+                                let context = format!("hot-zone {action:?} action");
+                                report_runtime_result(&context, port.apply(action), |message| {
+                                    eprintln!("{message}");
+                                });
+                            }
+                        }
+                        Err(error) => {
+                            if last_sample_error.as_deref() != Some(error.as_str()) {
+                                eprintln!("FlowContext hot-zone sampling failed: {error}");
+                            }
+                            last_sample_error = Some(error);
                         }
                     }
                     thread::sleep(interval);
@@ -108,7 +118,17 @@ pub struct TauriRuntimePort<R: tauri::Runtime> {
     settings: DeviceSettingsState,
     started_at: Instant,
     transition_until_ms: Arc<AtomicU64>,
+    monitor_cache: Option<MonitorCache>,
 }
+
+#[derive(Clone, Debug)]
+struct MonitorCache {
+    selected_monitor_id: Option<String>,
+    monitor: MonitorRect,
+    refreshed_at: Instant,
+}
+
+const MONITOR_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
 impl<R: tauri::Runtime> TauriRuntimePort<R> {
     pub fn new(window: tauri::WebviewWindow<R>, settings: DeviceSettings) -> Self {
@@ -121,6 +141,7 @@ impl<R: tauri::Runtime> TauriRuntimePort<R> {
             settings,
             started_at: Instant::now(),
             transition_until_ms: Arc::new(AtomicU64::new(0)),
+            monitor_cache: None,
         }
     }
 
@@ -145,11 +166,35 @@ impl<R: tauri::Runtime> TauriRuntimePort<R> {
         )
     }
 
-    fn selected_monitor(&self) -> Result<MonitorRect, String> {
-        let monitors = self.monitors()?;
+    fn selected_monitor(&mut self) -> Result<MonitorRect, String> {
         let settings = self.settings_snapshot();
-        let selected = resolve_selected_monitor(settings.selected_monitor_id.as_deref(), &monitors);
-        Ok(with_external_segments(selected, &monitors))
+        let selected_monitor_id = settings.selected_monitor_id.clone();
+        if let Some(cache) = &self.monitor_cache {
+            if cache.selected_monitor_id == selected_monitor_id
+                && cache.refreshed_at.elapsed() < MONITOR_REFRESH_INTERVAL
+            {
+                return Ok(cache.monitor.clone());
+            }
+        }
+
+        match self.monitors() {
+            Ok(monitors) => {
+                let selected = resolve_selected_monitor(selected_monitor_id.as_deref(), &monitors);
+                let monitor = with_external_segments(selected, &monitors);
+                self.monitor_cache = Some(MonitorCache {
+                    selected_monitor_id,
+                    monitor: monitor.clone(),
+                    refreshed_at: Instant::now(),
+                });
+                Ok(monitor)
+            }
+            Err(error) => self
+                .monitor_cache
+                .as_ref()
+                .filter(|cache| cache.selected_monitor_id == selected_monitor_id)
+                .map(|cache| cache.monitor.clone())
+                .ok_or(error),
+        }
     }
 }
 
@@ -211,7 +256,7 @@ pub fn show_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
-    let port = TauriRuntimePort::new(window.clone(), settings);
+    let mut port = TauriRuntimePort::new(window.clone(), settings);
     let monitor = port.selected_monitor()?;
     let controller = port.controller();
     let mut window_port = TauriWindowPort { window };
@@ -224,7 +269,7 @@ pub fn hide_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
-    let port = TauriRuntimePort::new(window.clone(), settings);
+    let mut port = TauriRuntimePort::new(window.clone(), settings);
     let monitor = port.selected_monitor()?;
     let controller = port.controller();
     let mut window_port = TauriWindowPort { window };
@@ -237,7 +282,7 @@ pub fn toggle_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
-    let port = TauriRuntimePort::new(window.clone(), settings);
+    let mut port = TauriRuntimePort::new(window.clone(), settings);
     let monitor = port.selected_monitor()?;
     let controller = port.controller();
     let mut window_port = TauriWindowPort { window };

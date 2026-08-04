@@ -12,6 +12,7 @@ import { ProjectGroups } from "../features/daily/ProjectGroups";
 import { ConnectionStatus } from "../features/daily/Disclosure";
 import { AuthGate } from "../features/auth/AuthGate";
 import type { AuthPort } from "../features/auth/useAuth";
+import { FlowContextMark, SyncedCloudIcon } from "../ui/icons";
 
 export interface AppProps {
   mode?: "web" | "desktop";
@@ -38,11 +39,18 @@ function AppContent({ mode }: { mode: "web" | "desktop" }) {
   return (
     <main className="flowcontext-app" data-mode={mode}>
       <header className="app-header">
-        <p className="eyebrow">FLOWCONTEXT</p>
-        <h1>今天，继续推进</h1>
-        <div className="header-actions">
-          <DateSelector mode={mode} value={selectedDate} onChange={setSelectedDate} />
-          <ConnectionStatus state={connectionState} />
+        <div className="brand-row">
+          <div className="brand-lockup">
+            <FlowContextMark data-testid="flowcontext-mark" width="20" height="20" />
+            <p className="eyebrow">FLOWCONTEXT</p>
+          </div>
+          <div className="brand-meta">
+            <DateSelector mode={mode} value={selectedDate} onChange={setSelectedDate} />
+            <div className="header-actions">
+              <SyncedCloudIcon data-testid="synced-mark" className="status-icon" width="19" height="19" />
+              <ConnectionStatus state={connectionState} />
+            </div>
+          </div>
         </div>
       </header>
       <TodoSection date={selectedDate} />

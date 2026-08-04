@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import type { TodoCreate } from "@flowcontext/domain";
+import { ClockIcon, PlusIcon } from "../../ui/icons";
 
 export interface TodoFormProps {
   date: string;
@@ -61,8 +62,9 @@ export function TodoForm({ date, mode, onCreate }: TodoFormProps) {
           />
         </label>
       ) : null}
-      <label>
+      <label className="todo-time-field">
         <span className="sr-only">计划时刻</span>
+        <ClockIcon width="20" height="20" />
         <input
           type="time"
           aria-label="计划时刻（可选）"
@@ -70,7 +72,9 @@ export function TodoForm({ date, mode, onCreate }: TodoFormProps) {
           onChange={(event) => setPlannedTime(event.target.value)}
         />
       </label>
-      <button type="submit" disabled={saving}>{saving ? "保存中…" : "添加"}</button>
+      <button type="submit" className="todo-add-button" aria-label={saving ? "保存中…" : "添加"} disabled={saving}>
+        {saving ? "保存中…" : <PlusIcon width="24" height="24" />}
+      </button>
       {error ? <p role="alert" className="error-text">{error}</p> : null}
     </form>
   );

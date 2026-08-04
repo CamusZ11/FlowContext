@@ -16,7 +16,10 @@ const seed: Todo[] = [
   { id: "done", title: "done task", plannedDate: date, plannedTime: "08:00", isCompleted: true, projectId: null, topicCardId: null },
 ];
 
-function renderTodoSection(options: { updateTodo?: FlowRepository["updateTodo"] } = {}) {
+function renderTodoSection(options: {
+  updateTodo?: FlowRepository["updateTodo"];
+  subscribeTodos?: FlowRepository["subscribeTodos"];
+} = {}) {
   let rows = [...seed];
   const repository: FlowRepository = {
     listTodos: async () => rows,
@@ -30,7 +33,7 @@ function renderTodoSection(options: { updateTodo?: FlowRepository["updateTodo"] 
       return rows.find((row) => row.id === id)!;
     }),
     deleteTodo: async (id) => { rows = rows.filter((row) => row.id !== id); },
-    subscribeTodos: () => () => undefined,
+    subscribeTodos: options.subscribeTodos ?? (() => () => undefined),
     listSuggestedTopics: async () => [],
     getTopicContext: async () => null,
     getDailyProjection: async () => null,
@@ -53,6 +56,8 @@ describe("TodoSection", () => {
     const rows = await screen.findAllByTestId("todo-row");
     expect(rows.map((row) => row.dataset.todoId)).toEqual(["timed", "untimed", "done"]);
     expect(screen.getByText("done task")).toHaveClass("completed");
+    expect(screen.getByRole("button", { name: "编辑 上午任务" })).toHaveAttribute("data-icon-button", "true");
+    expect(screen.getByRole("button", { name: "删除 上午任务" })).toHaveAttribute("data-icon-button", "true");
   });
 
   it("keeps the old checkbox value when the server rejects", async () => {
@@ -61,5 +66,32 @@ describe("TodoSection", () => {
     await userEvent.click(checkbox);
     expect(await screen.findByText("保存失败，请重试")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "完成 上午任务" })).not.toBeChecked();
+  });
+
+  it("checks a todo immediately while the server update is pending", async () => {
+    let resolveUpdate: (() => void) | undefined;
+    renderTodoSection({ updateTodo: () => new Promise((resolve) => { resolveUpdate = () => resolve(seed[1]); }) });
+    const checkbox = await screen.findByRole("checkbox", { name: "完成 上午任务" });
+    await userEvent.click(checkbox);
+    expect(await screen.findByRole("checkbox", { name: "完成 上午任务" })).toBeChecked();
+    resolveUpdate?.();
+  });
+
+  it("keeps the optimistic checked state when a stale subscription arrives", async () => {
+    let resolveUpdate: (() => void) | undefined;
+    let notify: ((todos: Todo[]) => void) | undefined;
+    renderTodoSection({
+      updateTodo: () => new Promise((resolve) => { resolveUpdate = () => resolve(seed[1]); }),
+      subscribeTodos: (_date, listener) => {
+        notify = listener;
+        return () => undefined;
+      },
+    });
+    const checkbox = await screen.findByRole("checkbox", { name: "完成 上午任务" });
+    await userEvent.click(checkbox);
+    notify?.(seed);
+    expect(await screen.findByRole("checkbox", { name: "完成 上午任务" })).toBeChecked();
+    expect(screen.getByText("上午任务")).toHaveClass("completed");
+    resolveUpdate?.();
   });
 });

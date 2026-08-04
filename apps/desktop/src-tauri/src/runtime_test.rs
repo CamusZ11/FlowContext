@@ -134,3 +134,47 @@ fn runtime_keeps_sampling_after_apply_failure() {
     assert_eq!(apply_calls.load(Ordering::SeqCst), 1);
     assert!(sample_calls.load(Ordering::SeqCst) >= 3);
 }
+
+struct TransientSampleFailurePort {
+    sample_calls: Arc<AtomicUsize>,
+    actions: Arc<Mutex<Vec<Action>>>,
+}
+
+impl RuntimePort for TransientSampleFailurePort {
+    fn sample(&mut self) -> Result<RuntimeSample, String> {
+        let call = self.sample_calls.fetch_add(1, Ordering::SeqCst);
+        if call == 0 {
+            return Err("temporary cursor query failure".to_owned());
+        }
+        let mut next = sample();
+        next.now_ms = if call == 1 { 0 } else { 150 };
+        Ok(next)
+    }
+
+    fn apply(&mut self, action: Action) -> Result<(), String> {
+        self.actions.lock().unwrap().push(action);
+        Ok(())
+    }
+}
+
+#[test]
+fn runtime_recovers_after_a_transient_sample_failure() {
+    let sample_calls = Arc::new(AtomicUsize::new(0));
+    let actions = Arc::new(Mutex::new(Vec::new()));
+    let runtime = SamplingRuntime::start(
+        TransientSampleFailurePort {
+            sample_calls: sample_calls.clone(),
+            actions: actions.clone(),
+        },
+        HotZoneEngine::new(2.0, 150, 0),
+        Duration::from_millis(1),
+    );
+    let deadline = Instant::now() + Duration::from_millis(100);
+    while actions.lock().unwrap().is_empty() && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+    runtime.stop().unwrap();
+
+    assert!(sample_calls.load(Ordering::SeqCst) >= 3);
+    assert_eq!(actions.lock().unwrap().as_slice(), [Action::Show]);
+}

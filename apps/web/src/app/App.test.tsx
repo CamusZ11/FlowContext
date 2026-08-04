@@ -15,11 +15,16 @@ const fakeRepository: FlowRepository = {
 };
 
 describe("App shell", () => {
-  it("renders the three required sections in order", () => {
-    render(<App mode="web" repository={fakeRepository} platform={webPlatform} />);
+  it("keeps sync status aligned with the brand without a headline", () => {
+    const { container } = render(<App mode="desktop" repository={fakeRepository} platform={webPlatform} />);
     const headings = screen.getAllByRole("heading").map((node) => node.textContent);
-    expect(headings).toEqual(expect.arrayContaining(["To-do", "建议继续", "Daily Lens"]));
-    expect(screen.getByText("To-do").compareDocumentPosition(screen.getByText("建议继续")))
+    expect(headings).toEqual(expect.arrayContaining(["今日待办", "建议继续", "Daily Lens"]));
+    expect(screen.queryByRole("heading", { name: "今天，继续推进" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("connection-status").closest(".brand-row")).toBe(container.querySelector(".brand-row"));
+    expect(screen.getByTestId("flowcontext-mark")).toBeInTheDocument();
+    expect(screen.getByTestId("synced-mark")).toBeInTheDocument();
+    expect(screen.getByText("今日待办").compareDocumentPosition(screen.getByText("建议继续")))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
+
 });

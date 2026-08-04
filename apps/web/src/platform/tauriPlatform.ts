@@ -73,16 +73,13 @@ export function createTauriSessionStorage(
   invoke: TauriInvoke,
   fallbackStorage: SessionStoragePort = createFallbackSessionStorage(),
 ): SessionStoragePort {
-  let nativeAvailable = true;
   const useNativeOrFallback = async <T>(
     nativeOperation: () => Promise<T>,
     fallbackOperation: () => T | Promise<T>,
   ): Promise<T> => {
-    if (!nativeAvailable) return await fallbackOperation();
     try {
       return await nativeOperation();
     } catch {
-      nativeAvailable = false;
       return await fallbackOperation();
     }
   };

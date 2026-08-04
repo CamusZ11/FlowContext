@@ -28,8 +28,8 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "resizable": true,
-        "transparent": true,
-        "shadow": true,
+        "transparent": false,
+        "shadow": false,
         "focus": false
       }
     ],
