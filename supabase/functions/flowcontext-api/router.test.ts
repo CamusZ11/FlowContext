@@ -14,6 +14,7 @@ import type {
   HandoffCreate,
   ProjectProjection,
   Session,
+  Todo,
   TopicCard,
 } from "../../../packages/domain/src/types.ts";
 
@@ -127,6 +128,7 @@ class FakeRepository implements ApiRepository, TokenLookup {
   lastHandoffInput: HandoffCreate | null = null;
   lastProjectInput: Record<string, unknown> | null = null;
   lastDailyInput: Record<string, unknown> | null = null;
+  lastTodoInput: Record<string, unknown> | null = null;
   projectCalls = 0;
   dailyCalls = 0;
 
@@ -194,6 +196,22 @@ class FakeRepository implements ApiRepository, TokenLookup {
       workspacePath: input.workspacePath ?? "/workspace",
       startedAt: input.startedAt ?? "2026-08-03T00:00:00.000Z",
       endedAt: input.endedAt ?? null,
+    };
+  }
+
+  async createTodo(
+    input: Record<string, unknown>,
+    _principal: Principal,
+  ): Promise<Todo> {
+    this.lastTodoInput = input;
+    return {
+      id: "todo-new",
+      title: input.title as string,
+      plannedDate: input.plannedDate as string,
+      plannedTime: input.plannedTime as string | null,
+      isCompleted: false,
+      projectId: null,
+      topicCardId: null,
     };
   }
 
@@ -439,6 +457,57 @@ Deno.test("topic and session writes use their stable Codex routes", async () => 
 
   assertEquals(topicResponse.status, 201);
   assertEquals(sessionResponse.status, 201);
+});
+
+Deno.test("Priming can create an uncompleted To-do for the selected day", async () => {
+  const repo = new FakeRepository();
+  const response = await route(
+    jsonRequest("POST", "/v1/todos", {
+      title: "验证 macOS 全屏覆盖",
+      plannedDate: "2026-08-04",
+      plannedTime: "09:30",
+      isCompleted: true,
+      ownerId: "another-owner",
+    }),
+    repo,
+    fixedPrincipal,
+  );
+
+  assertEquals(response.status, 201);
+  assertEquals(await responseJson(response), {
+    id: "todo-new",
+    title: "验证 macOS 全屏覆盖",
+    plannedDate: "2026-08-04",
+    plannedTime: "09:30",
+    isCompleted: false,
+    projectId: null,
+    topicCardId: null,
+  });
+  assertEquals(repo.lastTodoInput, {
+    title: "验证 macOS 全屏覆盖",
+    plannedDate: "2026-08-04",
+    plannedTime: "09:30",
+  });
+});
+
+Deno.test("Supabase function-prefixed paths route to the To-do endpoint", async () => {
+  const repo = new FakeRepository();
+  const response = await route(
+    jsonRequest("POST", "/flowcontext-api/v1/todos", {
+      title: "验证 macOS 全屏覆盖",
+      plannedDate: "2026-08-04",
+      plannedTime: null,
+    }),
+    repo,
+    fixedPrincipal,
+  );
+
+  assertEquals(response.status, 201);
+  assertEquals(repo.lastTodoInput, {
+    title: "验证 macOS 全屏覆盖",
+    plannedDate: "2026-08-04",
+    plannedTime: null,
+  });
 });
 
 Deno.test("topic creation rejects state so done requires explicit completion", async () => {

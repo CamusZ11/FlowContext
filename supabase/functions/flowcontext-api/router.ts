@@ -5,6 +5,7 @@ import type {
   HandoffCreate,
   ProjectProjection,
   Session,
+  Todo,
   TopicCard,
 } from "../../../packages/domain/src/types.ts";
 import { type Principal } from "./auth.ts";
@@ -205,6 +206,15 @@ function decodePathPart(raw: string, field: string): string {
   }
 }
 
+function apiPathname(request: Request): string {
+  const pathname = new URL(request.url).pathname;
+  // Supabase Edge forwards requests to this function with its slug preserved,
+  // while unit callers and local serving expose the API directly at /v1.
+  return pathname.startsWith("/flowcontext-api/")
+    ? pathname.slice("/flowcontext-api".length)
+    : pathname;
+}
+
 function requireMethod<T extends (...args: any[]) => Promise<any>>(
   owner: object,
   method: T | undefined,
@@ -251,6 +261,16 @@ function parseHandoff(body: Record<string, unknown>): HandoffCreate {
         openQuestions: topicUpdate.openQuestions as string[] | undefined,
       }
       : undefined,
+  };
+}
+
+type TodoCreateInput = Pick<Todo, "title" | "plannedDate" | "plannedTime">;
+
+function parseTodoCreate(body: Record<string, unknown>): TodoCreateInput {
+  return {
+    title: requiredString(body, "title"),
+    plannedDate: requireDate(requiredString(body, "plannedDate")),
+    plannedTime: optionalNullableString(body, "plannedTime") ?? null,
   };
 }
 
@@ -378,6 +398,17 @@ async function createSession(
   return jsonResponse(record, 201);
 }
 
+async function createTodo(
+  request: Request,
+  repo: ApiRepository,
+  principal: Principal,
+): Promise<Response> {
+  const input = parseTodoCreate(await readJson(request));
+  const create = requireMethod(repo, repo.createTodo);
+  const record = await create(input, principal) as Todo;
+  return jsonResponse(record, 201);
+}
+
 async function upsertProjectProjection(
   request: Request,
   repo: ApiRepository,
@@ -471,13 +502,16 @@ export async function route(
 
   try {
     const { method } = request;
-    const pathname = new URL(request.url).pathname;
+    const pathname = apiPathname(request);
 
     if (method === "POST" && pathname === "/v1/topics") {
       return await createTopic(request, repo, principal);
     }
     if (method === "POST" && pathname === "/v1/sessions") {
       return await createSession(request, repo, principal);
+    }
+    if (method === "POST" && pathname === "/v1/todos") {
+      return await createTodo(request, repo, principal);
     }
     if (method === "POST" && pathname === "/v1/handoffs") {
       return await createHandoff(request, repo, principal);

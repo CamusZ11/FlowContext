@@ -54,10 +54,10 @@ impl WindowController {
         let x = monitor.right() - width;
         let y = monitor.y;
         window
-            .prepare_overlay()
-            .and_then(|_| window.set_physical_size(width, height))
+            .set_physical_size(width, height)
             .and_then(|_| window.set_physical_position(x, y))
             .and_then(|_| window.set_always_on_top(true))
+            .and_then(|_| window.prepare_overlay())
             .and_then(|_| window.show())
             .map_err(WindowControllerError::Operation)
     }

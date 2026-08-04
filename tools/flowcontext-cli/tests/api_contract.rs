@@ -1,4 +1,4 @@
-use flowcontext_cli::client::{FlowContextClient, HandoffCreate, HandoffTopicUpdate};
+use flowcontext_cli::client::{FlowContextClient, HandoffCreate, HandoffTopicUpdate, TodoCreate};
 use reqwest::Client as HttpClient;
 use secrecy::SecretString;
 use serde_json::json;
@@ -73,4 +73,37 @@ async fn failed_response_does_not_include_response_body_in_error() {
         .to_string();
     assert!(!error.contains("private handoff body"));
     assert!(!error.contains("secret"));
+}
+
+#[tokio::test]
+async fn todo_create_sends_only_the_priming_fields() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/todos"))
+        .and(header_exists("x-flowcontext-token"))
+        .and(body_json(json!({
+            "title": "验证 macOS 全屏覆盖",
+            "plannedDate": "2026-08-04",
+            "plannedTime": "09:30"
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "todo-1" })))
+        .mount(&server)
+        .await;
+
+    let client = FlowContextClient::with_http(
+        server.uri(),
+        SecretString::from("device-token".to_string()),
+        HttpClient::new(),
+    )
+    .unwrap();
+    let result = client
+        .create_todo(&TodoCreate {
+            title: "验证 macOS 全屏覆盖".into(),
+            planned_date: "2026-08-04".into(),
+            planned_time: Some("09:30".into()),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.id, "todo-1");
 }

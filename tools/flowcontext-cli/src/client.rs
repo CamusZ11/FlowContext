@@ -43,6 +43,14 @@ pub struct HandoffTopicUpdate {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct TodoCreate {
+    pub title: String,
+    pub planned_date: String,
+    pub planned_time: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionStart {
     pub topic_card_id: String,
     pub codex_thread_id: String,
@@ -130,6 +138,10 @@ impl FlowContextClient {
     pub async fn start_session(&self, input: &SessionStart) -> Result<CreatedRecord> {
         self.request(Method::POST, "/v1/sessions", Some(input))
             .await
+    }
+
+    pub async fn create_todo(&self, input: &TodoCreate) -> Result<CreatedRecord> {
+        self.request(Method::POST, "/v1/todos", Some(input)).await
     }
 
     pub async fn complete_topic(&self, topic_id: &str, explicit: bool) -> Result<CreatedRecord> {

@@ -7,7 +7,7 @@ use clap::{Args, Parser, Subcommand};
 use secrecy::SecretString;
 
 use client::FlowContextClient;
-use commands::{auth, handoff, projection, session};
+use commands::{auth, handoff, projection, session, todo};
 
 #[derive(Debug, Parser)]
 #[command(name = "flowcontext", version, about = "FlowContext Codex bridge")]
@@ -42,6 +42,10 @@ enum Command {
         #[command(subcommand)]
         command: TopicCommand,
     },
+    Todo {
+        #[command(subcommand)]
+        command: TodoCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -67,6 +71,11 @@ enum ProjectionCommand {
 #[derive(Debug, Subcommand)]
 enum TopicCommand {
     Complete(CompleteTopicArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum TodoCommand {
+    Create(todo::TodoArgs),
 }
 
 #[derive(Debug, Args)]
@@ -119,6 +128,12 @@ async fn run() -> Result<()> {
             let result = client.complete_topic(&args.topic, args.explicit).await?;
             println!("topic completed: {}", result.id);
             Ok(())
+        }
+        Command::Todo {
+            command: TodoCommand::Create(args),
+        } => {
+            let client = client_from_parts(api_url.as_deref(), device.as_deref())?;
+            todo::run(&client, args).await
         }
     }
 }

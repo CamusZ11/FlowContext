@@ -173,6 +173,17 @@ const topicRow = {
   resurface_condition: null,
 };
 
+const todoRow = {
+  id: "todo-1",
+  owner_id: fixedPrincipal.ownerId,
+  title: "验证 macOS 全屏覆盖",
+  planned_date: "2026-08-04",
+  planned_time: "09:30",
+  is_completed: false,
+  project_id: null,
+  topic_card_id: null,
+};
+
 Deno.test("repository looks up device tokens by hash only", async () => {
   const client = new RecordingClient();
   const tokenHash = "a".repeat(64);
@@ -230,6 +241,33 @@ Deno.test("topic writes force owner and never persist state or unknown owner fie
     resurface_at: undefined,
     resurface_condition: undefined,
   });
+});
+
+Deno.test("todo writes are owner-scoped and always start uncompleted", async () => {
+  const client = new RecordingClient();
+  client.enqueue("single", { data: todoRow, error: null });
+  const repo = createSupabaseRepository(client);
+
+  const todo = await repo.createTodo?.({
+    title: "验证 macOS 全屏覆盖",
+    plannedDate: "2026-08-04",
+    plannedTime: "09:30",
+  }, fixedPrincipal);
+  const insert = client.calls.find((call) =>
+    call.kind === "insert" && call.table === "todos"
+  );
+
+  assertEquals(todo?.isCompleted, false);
+  assert(insert?.kind === "insert");
+  if (insert?.kind === "insert") {
+    assertEquals(insert.values, {
+      owner_id: fixedPrincipal.ownerId,
+      title: "验证 macOS 全屏覆盖",
+      planned_date: "2026-08-04",
+      planned_time: "09:30",
+      is_completed: false,
+    });
+  }
 });
 
 Deno.test("handoff idempotency retry returns the original record without a second topic update", async () => {

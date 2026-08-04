@@ -94,7 +94,7 @@ fn show_places_panel_at_selected_monitor_right_edge() {
 }
 
 #[test]
-fn show_prepares_overlay_before_any_window_mutation() {
+fn show_reasserts_native_overlay_profile_immediately_before_ordering_front() {
     let mut window = FakeWindow::new();
     let controller = WindowController::new(420.0, 360.0, 560.0);
 
@@ -105,10 +105,10 @@ fn show_prepares_overlay_before_any_window_mutation() {
     assert_eq!(
         window.operations,
         vec![
-            "prepare_overlay",
             "set_physical_size",
             "set_physical_position",
             "set_always_on_top",
+            "prepare_overlay",
             "show",
         ]
     );
@@ -130,7 +130,15 @@ fn show_stops_when_overlay_preparation_fails() {
             "native overlay unavailable".to_owned()
         ))
     );
-    assert_eq!(window.operations, vec!["prepare_overlay"]);
+    assert_eq!(
+        window.operations,
+        vec![
+            "set_physical_size",
+            "set_physical_position",
+            "set_always_on_top",
+            "prepare_overlay",
+        ]
+    );
 }
 
 #[test]

@@ -5,6 +5,7 @@ import type {
   HandoffCreate,
   ProjectProjection,
   Session,
+  Todo,
   TopicCard,
 } from "../../../packages/domain/src/types.ts";
 import type { Principal } from "./auth.ts";
@@ -22,6 +23,7 @@ export type SessionCreate = Partial<Session>;
 export type ProjectProjectionWrite = Partial<ProjectProjection>;
 export type DailyProjectionWrite = Partial<DailyProjection>;
 export type DeviceWorkspaceWrite = Partial<DeviceWorkspace>;
+export type TodoCreateInput = Pick<Todo, "title" | "plannedDate" | "plannedTime">;
 
 export interface HandoffCreateResult {
   record: Handoff;
@@ -46,6 +48,7 @@ export interface ApiRepository {
   ): Promise<TopicCard>;
   createTopic?(input: TopicCreate, principal: Principal): Promise<TopicCard>;
   createSession?(input: SessionCreate, principal: Principal): Promise<Session>;
+  createTodo?(input: TodoCreateInput, principal: Principal): Promise<Todo>;
   upsertProjectProjection?(
     id: string,
     input: ProjectProjectionWrite,
@@ -161,6 +164,25 @@ export class SupabaseApiRepository implements ApiRepository {
       .select("*")
       .single<SessionRow>();
     return mapSession(unwrapSingle(result, "session_create"));
+  }
+
+  async createTodo(
+    input: TodoCreateInput,
+    principal: Principal,
+  ): Promise<Todo> {
+    const payload = {
+      owner_id: principal.ownerId,
+      title: input.title,
+      planned_date: input.plannedDate,
+      planned_time: input.plannedTime,
+      is_completed: false,
+    };
+    const result = await this.client
+      .from("todos")
+      .insert(payload)
+      .select("*")
+      .single<TodoRow>();
+    return mapTodo(unwrapSingle(result, "todo_create"));
   }
 
   async createHandoff(
@@ -298,6 +320,7 @@ type HandoffRow = Row;
 type ProjectProjectionRow = Row;
 type DailyProjectionRow = Row;
 type DeviceWorkspaceRow = Row;
+type TodoRow = Row;
 
 function isRecord(value: unknown): value is Row {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -479,6 +502,21 @@ function mapWorkspace(row: DeviceWorkspaceRow): DeviceWorkspace {
   };
 }
 
+function mapTodo(row: TodoRow): Todo {
+  if (typeof row.is_completed !== "boolean") {
+    throw new ApiError(502, "todo_mapping");
+  }
+  return {
+    id: requiredString(row, "id", "todo_mapping"),
+    title: requiredString(row, "title", "todo_mapping"),
+    plannedDate: requiredString(row, "planned_date", "todo_mapping"),
+    plannedTime: nullableString(row, "planned_time", "todo_mapping"),
+    isCompleted: row.is_completed,
+    projectId: nullableString(row, "project_id", "todo_mapping"),
+    topicCardId: nullableString(row, "topic_card_id", "todo_mapping"),
+  };
+}
+
 function isLifecycleStatus(
   value: unknown,
 ): value is ProjectProjection["lifecycleStatus"] {
@@ -522,6 +560,7 @@ export function createUnconfiguredRepository(): ApiRepository {
     completeTopic: unavailable,
     createTopic: unavailable,
     createSession: unavailable,
+    createTodo: unavailable,
     upsertProjectProjection: unavailable,
     upsertDailyProjection: unavailable,
     upsertDeviceWorkspace: unavailable,

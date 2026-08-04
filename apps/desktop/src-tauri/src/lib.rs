@@ -45,7 +45,12 @@ pub fn run() {
         })
         .build();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             settings::get_device_settings,
             settings::set_device_settings,
@@ -75,11 +80,17 @@ pub fn run() {
             None,
         ))
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.handle()
+                .set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+
             tray::install(&app.handle())?;
             let settings = settings::load(app.handle()).unwrap_or_default();
             let settings_state = settings::DeviceSettingsState::new(settings);
             app.manage(settings_state.clone());
             if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                macos_window::install_fullscreen_overlay_panel(&window)?;
                 macos_window::prepare_fullscreen_overlay(&window)?;
                 let port = runtime::TauriRuntimePort::new_with_state(window, settings_state);
                 let sampling = runtime::SamplingRuntime::start(
