@@ -61,6 +61,9 @@ impl SamplingRuntime {
                 while !stop_worker.load(Ordering::Acquire) {
                     match port.sample() {
                         Ok(sample) => {
+                            if stop_worker.load(Ordering::Acquire) {
+                                break;
+                            }
                             last_sample_error = None;
                             let actions = engine.sample(
                                 sample.now_ms,
@@ -99,6 +102,15 @@ impl SamplingRuntime {
             .expect("runtime worker exists")
             .join()
             .map_err(|_| "runtime worker panicked".to_owned())
+    }
+
+    /// Retire a sampler that may be blocked inside a native call while macOS
+    /// is asleep. A wake recovery can immediately install a fresh sampler;
+    /// this worker will exit without applying actions if its native call later
+    /// returns.
+    pub fn retire(mut self) {
+        self.stop.store(true, Ordering::Release);
+        drop(self.worker.take());
     }
 }
 
@@ -289,6 +301,36 @@ pub fn toggle_panel<R: tauri::Runtime>(
     controller
         .toggle(&mut window_port, monitor)
         .map_err(|error| error.to_string())
+}
+
+/// Recreate the sampling path after macOS wakes. Native display and cursor
+/// queries can remain blocked across sleep, so the old worker is retired
+/// without joining and a new port starts with an empty monitor cache.
+pub fn restart_sampling_after_wake<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    settings: DeviceSettingsState,
+    sampling: &std::sync::Mutex<Option<SamplingRuntime>>,
+) -> Result<(), String> {
+    crate::macos_window::prepare_fullscreen_overlay(&window)?;
+    crate::macos_window::hide_fullscreen_overlay(&window)?;
+
+    let previous = sampling
+        .lock()
+        .map_err(|_| "FlowContext hot-zone runtime lock poisoned".to_owned())?
+        .take();
+    if let Some(runtime) = previous {
+        runtime.retire();
+    }
+
+    let replacement = SamplingRuntime::start(
+        TauriRuntimePort::new_with_state(window, settings),
+        HotZoneEngine::new(2.0, 150, 0),
+        SamplingRuntime::default_interval(),
+    );
+    *sampling
+        .lock()
+        .map_err(|_| "FlowContext hot-zone runtime lock poisoned".to_owned())? = Some(replacement);
+    Ok(())
 }
 
 impl<R: tauri::Runtime> RuntimePort for TauriRuntimePort<R> {

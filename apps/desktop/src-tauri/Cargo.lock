@@ -1024,6 +1024,7 @@ name = "flowcontext-desktop"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "block2",
  "keyring",
  "objc2",
  "objc2-app-kit",

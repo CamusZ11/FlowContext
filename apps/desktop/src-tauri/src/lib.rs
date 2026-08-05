@@ -1,4 +1,6 @@
 pub mod hot_zone;
+#[cfg(target_os = "macos")]
+pub mod macos_lifecycle;
 pub mod macos_window;
 pub mod monitor;
 pub mod native_commands;
@@ -99,6 +101,8 @@ pub fn run() {
                     runtime::SamplingRuntime::default_interval(),
                 );
                 app.manage(DesktopRuntimeState(Mutex::new(Some(sampling))));
+                #[cfg(target_os = "macos")]
+                macos_lifecycle::install_wake_recovery(app.handle().clone())?;
             }
             Ok(())
         })

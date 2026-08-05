@@ -1,6 +1,7 @@
 use super::hot_zone::{Action, HotZoneEngine, MonitorRect, Point, Rect, WindowState};
 use super::runtime::{report_runtime_result, RuntimePort, RuntimeSample, SamplingRuntime};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -57,6 +58,44 @@ fn runtime_can_be_stopped_without_leaking_worker_thread() {
     std::thread::sleep(Duration::from_millis(5));
     runtime.stop().unwrap();
     assert!(actions.lock().unwrap().is_empty());
+}
+
+struct BlockingSamplePort {
+    started: mpsc::Sender<()>,
+    release: mpsc::Receiver<()>,
+}
+
+impl RuntimePort for BlockingSamplePort {
+    fn sample(&mut self) -> Result<RuntimeSample, String> {
+        self.started.send(()).unwrap();
+        self.release.recv().unwrap();
+        Err("sleeping native query resumed".to_owned())
+    }
+
+    fn apply(&mut self, _action: Action) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[test]
+fn runtime_can_be_retired_without_waiting_for_a_blocked_native_sample() {
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let runtime = SamplingRuntime::start(
+        BlockingSamplePort {
+            started: started_tx,
+            release: release_rx,
+        },
+        HotZoneEngine::new(2.0, 150, 0),
+        Duration::from_millis(1),
+    );
+    started_rx.recv_timeout(Duration::from_millis(100)).unwrap();
+
+    let retired_at = Instant::now();
+    runtime.retire();
+
+    assert!(retired_at.elapsed() < Duration::from_millis(50));
+    release_tx.send(()).unwrap();
 }
 
 #[test]
