@@ -3,6 +3,7 @@ import {
   assertExplicitTopicCompletion,
   handoffUpdateSchema,
   isoDateSchema,
+  sessionSchema,
   sortTodosForDate,
   timeSchema,
   topicCardSchema,
@@ -39,6 +40,20 @@ describe("FlowContext invariants", () => {
     expect(timeSchema.safeParse(null).success).toBe(true);
     expect(timeSchema.safeParse("24:00").success).toBe(false);
     expect(timeSchema.safeParse("9:05").success).toBe(false);
+  });
+
+  it("accepts legacy sessions without platform but rejects an invalid captured platform", () => {
+    const session = {
+      id: "session-1",
+      topicCardId: "topic-1",
+      codexThreadId: "thread-1",
+      deviceId: "device-1",
+      workspacePath: "/Users/camus/Documents/FlowContext",
+      startedAt: "2026-08-05T08:00:00.000Z",
+    };
+    expect(sessionSchema.safeParse(session).success).toBe(true);
+    expect(sessionSchema.safeParse({ ...session, platform: "macos" }).success).toBe(true);
+    expect(sessionSchema.safeParse({ ...session, platform: "linux" }).success).toBe(false);
   });
 
   it("requires every topic card to belong to a project", () => {

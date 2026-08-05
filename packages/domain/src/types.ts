@@ -33,6 +33,8 @@ export interface Session {
   topicCardId: string;
   codexThreadId: string;
   deviceId: string;
+  /** Null only for sessions created before platform capture was introduced. */
+  platform?: DevicePlatform | null;
   workspacePath: string;
   startedAt: string;
   endedAt?: string | null;
