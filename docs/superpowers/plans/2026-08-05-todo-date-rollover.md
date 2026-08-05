@@ -10,7 +10,7 @@
 
 ---
 
-## 任务 1：新增 owner-scoped 原子滚动 RPC 与数据库验证
+## Task 1: 新增 owner-scoped 原子滚动 RPC 与数据库验证
 
 **文件：**
 - 新建：`supabase/migrations/<timestamp>_rollover_incomplete_todos.sql`
@@ -35,7 +35,7 @@
 6. 在 RLS 测试中以另一用户认证，断言函数既不能搬运目标 owner 行，也只影响调用者自己的行。
 7. 执行本地数据库测试（若本机 Supabase 容器已启动）：`supabase test db`。若 Docker 未启动，记录为外部运行前置条件，不用 SQL 模拟代替。
 
-## 任务 2：把 rollover 作为 Supabase 仓储能力暴露，并覆盖适配器契约
+## Task 2: 把 rollover 作为 Supabase 仓储能力暴露，并覆盖适配器契约
 
 **文件：**
 - 修改：`packages/data/src/FlowRepository.ts`
@@ -59,7 +59,7 @@
 5. 更新所有 `FlowRepository` 测试 fake，默认提供无副作用的 `async () => []`。
 6. 运行：`pnpm --filter @flowcontext/data test && pnpm --filter @flowcontext/data typecheck`。
 
-## 任务 3：以 React Query 在“进入今天”时执行一次滚动并同步日期缓存
+## Task 3: 以 React Query 在“进入今天”时执行一次滚动并同步日期缓存
 
 **文件：**
 - 修改：`apps/web/src/features/todos/useTodos.ts`
@@ -78,7 +78,7 @@
 5. 不在浏览历史日期、创建/勾选 To-do、应用启动但尚未确定当天日期等路径调用该 RPC。
 6. 运行：`pnpm --filter @flowcontext/web test && pnpm --filter @flowcontext/web typecheck`。
 
-## 任务 4：统一 Web/桌面日期选择，采用 `MM / DD` 标题排版
+## Task 4: 统一 Web/桌面日期选择，采用 `MM / DD` 标题排版
 
 **文件：**
 - 修改：`apps/web/src/features/calendar/useSelectedDate.ts`
@@ -106,7 +106,7 @@
 9. 更新 `TodoSection` 测试验证日期按钮、切换后标题/空态、创建事项计划日期跟随所选日期；保留待办排序、乐观更新及 Realtime 回归测试。
 10. 运行：`pnpm --filter @flowcontext/web test && pnpm --filter @flowcontext/web typecheck`。
 
-## 任务 5：完整回归、实机验收与项目状态记录
+## Task 5: 完整回归、实机验收与项目状态记录
 
 **文件：**
 - 修改：`/Users/camus/All_in_Context/03_项目/00_收集箱/FlowContext/status.md`
