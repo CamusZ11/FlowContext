@@ -20,6 +20,7 @@ const makeTopic = (id: string, overrides: Partial<TopicCard> = {}): TopicCard =>
 });
 
 const fakeRepository: FlowRepository = {
+  capabilities: { todoRollover: true },
   listTodos: async () => [],
   createTodo: async () => { throw new Error("not used"); },
   updateTodo: async () => { throw new Error("not used"); },

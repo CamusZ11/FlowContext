@@ -23,6 +23,7 @@ function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics
   const listeners = new Set<(date: string) => void>();
   const notify = (date: string) => listeners.forEach((listener) => listener(date));
   return {
+    capabilities: { todoRollover: true },
     listTodos: async (date) => todos.filter((todo) => todo.plannedDate === date),
     createTodo: async (input: TodoCreate) => {
       const todo: Todo = { ...input, id: `e2e-${nextId++}` };

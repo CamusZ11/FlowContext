@@ -315,6 +315,7 @@ async function execute(query: PromiseLike<QueryResult>): Promise<unknown> {
 }
 
 export class SupabaseFlowRepository implements FlowRepository {
+  readonly capabilities = { todoRollover: true } as const;
   private readonly client: SupabaseClientLike;
   private readonly currentLocalDate: () => string;
 

@@ -117,6 +117,8 @@ describe("HttpFlowRepository", () => {
       fetchImpl,
     });
 
+    expect(repo.capabilities).toEqual({ todoRollover: false });
+
     await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).rejects.toThrow(
       "rolloverIncompleteTodos is not supported by the self-hosted provider",
     );

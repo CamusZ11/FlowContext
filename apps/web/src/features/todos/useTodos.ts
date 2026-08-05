@@ -37,10 +37,11 @@ export function useTodos(date: string) {
   const queryClient = useQueryClient();
   const today = platform.today();
   const shouldRollover = date === today;
-  const yesterday = shouldRollover ? previousLocalIsoDate(today) : null;
+  const shouldRunRollover = shouldRollover && repository.capabilities.todoRollover;
+  const yesterday = shouldRunRollover ? previousLocalIsoDate(today) : null;
   const rollover = useQuery({
     queryKey: rolloverQueryKey(today),
-    enabled: shouldRollover,
+    enabled: shouldRunRollover,
     staleTime: Infinity,
     retry: false,
     queryFn: async () => {
@@ -55,7 +56,7 @@ export function useTodos(date: string) {
   const query = useQuery({
     queryKey: todosQueryKey(date),
     queryFn: async () => sortTodosForDate(await repository.listTodos(date), date),
-    enabled: !shouldRollover || rollover.isSuccess,
+    enabled: !shouldRunRollover || rollover.isSuccess,
   });
 
   useEffect(() => {
@@ -68,9 +69,11 @@ export function useTodos(date: string) {
 
   return {
     ...query,
-    isPending: (shouldRollover && rollover.isPending) || query.isPending,
-    isError: (shouldRollover && rollover.isError) || query.isError,
-    error: shouldRollover ? rollover.error ?? query.error : query.error,
+    isPending: (shouldRunRollover && rollover.isPending) || query.isPending,
+    isError: (shouldRunRollover && rollover.isError) || query.isError,
+    error: shouldRunRollover ? rollover.error ?? query.error : query.error,
+    retryRollover: shouldRunRollover && rollover.isError ? () => rollover.refetch() : undefined,
+    isRolloverRetrying: shouldRunRollover && rollover.isError && rollover.isFetching,
   };
 }
 

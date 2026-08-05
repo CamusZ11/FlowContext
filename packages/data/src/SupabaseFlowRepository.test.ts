@@ -227,6 +227,8 @@ describe("SupabaseFlowRepository", () => {
     });
     const repo = new SupabaseFlowRepository(client, () => "2026-08-05");
 
+    expect(repo.capabilities).toEqual({ todoRollover: true });
+
     await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).resolves.toEqual([{
       id: "todo-1",
       title: "Read the brief",

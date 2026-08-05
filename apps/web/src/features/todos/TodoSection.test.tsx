@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FlowRepository } from "@flowcontext/data";
 import type { Todo } from "@flowcontext/domain";
@@ -20,13 +20,15 @@ const seed: Todo[] = [
 function renderTodoSection(options: {
   date?: string;
   platform?: PlatformPort;
+  listTodos?: FlowRepository["listTodos"];
   updateTodo?: FlowRepository["updateTodo"];
   subscribeTodos?: FlowRepository["subscribeTodos"];
   rolloverIncompleteTodos?: FlowRepository["rolloverIncompleteTodos"];
 } = {}) {
   let rows = [...seed];
   const repository: FlowRepository = {
-    listTodos: async () => rows,
+    capabilities: { todoRollover: true },
+    listTodos: options.listTodos ?? (async () => rows),
     createTodo: async (input) => {
       const todo = { ...input, id: "new" };
       rows = [...rows, todo];
@@ -108,5 +110,37 @@ describe("TodoSection", () => {
     });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("加载失败，请重试");
+  });
+
+  it("retries a failed today rollover when the user requests it", async () => {
+    let attempts = 0;
+    renderTodoSection({
+      date: "2026-08-05",
+      platform: { ...webPlatform, today: () => "2026-08-05" },
+      rolloverIncompleteTodos: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("network");
+        return [];
+      },
+    });
+
+    await userEvent.click(await screen.findByRole("button", { name: "重试加载今日待办" }));
+
+    await waitFor(() => {
+      expect(attempts).toBe(2);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not offer a rollover retry when loading the list fails after a successful rollover", async () => {
+    renderTodoSection({
+      date: "2026-08-05",
+      platform: { ...webPlatform, today: () => "2026-08-05" },
+      listTodos: async () => { throw new Error("network"); },
+    });
+
+    await screen.findByRole("alert");
+
+    expect(screen.queryByRole("button", { name: "重试加载今日待办" })).not.toBeInTheDocument();
   });
 });

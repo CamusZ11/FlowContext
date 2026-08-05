@@ -4,6 +4,7 @@ import { App } from "./App";
 import { webPlatform } from "../platform/webPlatform";
 
 const fakeRepository: FlowRepository = {
+  capabilities: { todoRollover: true },
   listTodos: async () => [],
   createTodo: async () => { throw new Error("not used"); },
   updateTodo: async () => { throw new Error("not used"); },

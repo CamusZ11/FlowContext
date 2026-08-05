@@ -367,6 +367,7 @@ function startTodoSubscription(
 }
 
 export class HttpFlowRepository implements FlowRepository {
+  readonly capabilities = { todoRollover: false } as const;
   private readonly transport: HttpTransport;
 
   constructor(options: HttpFlowRepositoryOptions) {

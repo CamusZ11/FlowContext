@@ -41,7 +41,20 @@ export function TodoSection({ date }: TodoSectionProps) {
       </div>
       <TodoForm date={date} mode={platform.mode} onCreate={create} />
       {query.isPending ? <p role="status">加载中…</p> : null}
-      {query.isError ? <p role="alert" className="error-text">加载失败，请重试</p> : null}
+      {query.isError ? (
+        <div role="alert" className="error-text">
+          <span>加载失败，请重试</span>
+          {query.retryRollover ? (
+            <button
+              type="button"
+              onClick={() => { void query.retryRollover?.(); }}
+              disabled={query.isRolloverRetrying}
+            >
+              {query.isRolloverRetrying ? "正在重试…" : "重试加载今日待办"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <ul className="todo-list" aria-label="未完成 To-do">
         {activeTodos.map((todo) => (
           <TodoRow

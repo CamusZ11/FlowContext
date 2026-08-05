@@ -19,11 +19,16 @@ export interface TopicContext {
 export type TodoListener = (todos: Todo[]) => void;
 export type TodoSubscriptionCleanup = () => void;
 
+export interface FlowRepositoryCapabilities {
+  todoRollover: boolean;
+}
+
 /**
  * Stable frontend data port. Supabase and any replacement backend stay behind
  * this interface; UI code only sees domain values.
  */
 export interface FlowRepository {
+  readonly capabilities: FlowRepositoryCapabilities;
   listTodos(date: string): Promise<Todo[]>;
   createTodo(input: TodoCreate): Promise<Todo>;
   updateTodo(id: string, patch: TodoPatch): Promise<Todo>;

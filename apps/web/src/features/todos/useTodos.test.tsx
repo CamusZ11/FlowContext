@@ -12,12 +12,14 @@ import { todosQueryKey, useTodos } from "./useTodos";
 const today = "2026-08-05";
 
 function createRepository(options: {
+  todoRollover?: boolean;
   listTodos?: (date: string) => Promise<Todo[]>;
   rolloverIncompleteTodos?: (fromDate: string, toDate: string) => Promise<Todo[]>;
 } = {}) {
   const rolloverCalls: Array<[string, string]> = [];
   const listCalls: string[] = [];
   const repository: FlowRepository = {
+    capabilities: { todoRollover: options.todoRollover ?? true },
     listTodos: async (date) => {
       listCalls.push(date);
       return options.listTodos?.(date) ?? [];
@@ -92,6 +94,30 @@ describe("useTodos", () => {
 
     expect(result.current.isPending).toBe(false);
     expect(rolloverCalls).toEqual([]);
+  });
+
+  it("loads today without rollover when the repository does not support atomic rollover", async () => {
+    const selfHostedTodo: Todo = {
+      id: "self-hosted",
+      title: "今天已有事项",
+      plannedDate: today,
+      plannedTime: null,
+      isCompleted: false,
+      projectId: null,
+      topicCardId: null,
+    };
+    const { repository, listCalls, rolloverCalls } = createRepository({
+      todoRollover: false,
+      listTodos: async () => [selfHostedTodo],
+    });
+    const { result } = renderTodos(repository);
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([selfHostedTodo]);
+    });
+
+    expect(rolloverCalls).toEqual([]);
+    expect(listCalls).toEqual([today]);
   });
 
   it("loads the current list only after rollover succeeds", async () => {
