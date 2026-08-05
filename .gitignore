@@ -1,5 +1,6 @@
 .contract-runtime/
 .superpowers/
+.worktrees/
 node_modules/
 dist/
 target/
