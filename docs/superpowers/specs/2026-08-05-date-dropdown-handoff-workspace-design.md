@@ -12,8 +12,9 @@
 - Topic context 正在加载时，按钮显示加载中且不可触发，不使用“灰色且无说明”的最终禁用态。
 - 无 Handoff/Session 时保留不可继续的解释文案；有 Handoff 但缺当前设备 workspace 时显示“下次 Handoff 将自动配置此设备”，不伪造 Codex 链接。
 - 已得到完整 context 后，`继续此主题` 使用当前设备映射生成 `codex://new`；仍有进行中的 Session 时打开既有 thread。
-## Handoff 原子工作区绑定
-- `generating-handoff` 的确认写入契约扩展为：从已绑定 Session 取得 `device_id`、`workspace_path` 与 Topic 对应 Project，并在同一数据库 RPC 中 upsert `device_workspaces(owner_id, device_id, project_id)`。
+## Session 平台事实与 Handoff 原子工作区绑定
+- Session 增加不可变 `platform`（`macos | windows`）；`flowcontext-session` 在开工绑定时由当前运行平台写入，旧 Session 不推测平台。
+- `generating-handoff` 的确认写入契约扩展为：从已绑定 Session 取得 `device_id`、`platform`、`workspace_path` 与 Topic 对应 Project，并在同一数据库 RPC 中 upsert `device_workspaces(owner_id, device_id, project_id)`。
 - Handoff、Topic 连续性更新和 device workspace upsert 属于单一事务：任一校验或写入失败则全部回滚；幂等重试不得创建重复 Handoff 或错误覆盖无关项目映射。
 - 路径仅来自服务器已验证的 Session，不从客户端 Handoff JSON 接收；不会允许 Handoff 改写 Project、Topic state 或任意其他设备的路径。
 - 现有已写入 Handoff 不主动猜测/回填；下一次确认 Handoff 自动补齐。当前 FlowContext Topic 的已知映射只可通过一次受控、owner-scoped backfill 写入 `/Users/camus/Documents/FlowContext`，作为单独可审计操作。
