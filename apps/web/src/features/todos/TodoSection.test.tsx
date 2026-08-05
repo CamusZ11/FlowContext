@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FlowRepository } from "@flowcontext/data";
 import type { Todo } from "@flowcontext/domain";
+import type { PlatformPort } from "../../platform/PlatformPort";
 import { AppProviders } from "../../app/AppProviders";
 import { PlatformProvider } from "../../app/PlatformContext";
 import { RepositoryProvider } from "../../app/RepositoryContext";
@@ -17,8 +18,11 @@ const seed: Todo[] = [
 ];
 
 function renderTodoSection(options: {
+  date?: string;
+  platform?: PlatformPort;
   updateTodo?: FlowRepository["updateTodo"];
   subscribeTodos?: FlowRepository["subscribeTodos"];
+  rolloverIncompleteTodos?: FlowRepository["rolloverIncompleteTodos"];
 } = {}) {
   let rows = [...seed];
   const repository: FlowRepository = {
@@ -33,7 +37,7 @@ function renderTodoSection(options: {
       return rows.find((row) => row.id === id)!;
     }),
     deleteTodo: async (id) => { rows = rows.filter((row) => row.id !== id); },
-    rolloverIncompleteTodos: async () => [],
+    rolloverIncompleteTodos: options.rolloverIncompleteTodos ?? (async () => []),
     subscribeTodos: options.subscribeTodos ?? (() => () => undefined),
     listSuggestedTopics: async () => [],
     getTopicContext: async () => null,
@@ -43,8 +47,8 @@ function renderTodoSection(options: {
   render(
     <QueryClientProvider client={queryClient}>
       <RepositoryProvider value={repository}>
-        <PlatformProvider value={webPlatform}>
-          <TodoSection date={date} />
+        <PlatformProvider value={options.platform ?? webPlatform}>
+          <TodoSection date={options.date ?? date} />
         </PlatformProvider>
       </RepositoryProvider>
     </QueryClientProvider>,
@@ -94,5 +98,15 @@ describe("TodoSection", () => {
     expect(await screen.findByRole("checkbox", { name: "完成 上午任务" })).toBeChecked();
     expect(screen.getByText("上午任务")).toHaveClass("completed");
     resolveUpdate?.();
+  });
+
+  it("shows a loading error when today rollover fails", async () => {
+    renderTodoSection({
+      date: "2026-08-05",
+      platform: { ...webPlatform, today: () => "2026-08-05" },
+      rolloverIncompleteTodos: async () => { throw new Error("network"); },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("加载失败，请重试");
   });
 });

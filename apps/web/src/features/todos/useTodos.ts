@@ -1,10 +1,21 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { sortTodosForDate, type Todo, type TodoCreate, type TodoPatch } from "@flowcontext/domain";
+import { usePlatform } from "../../app/PlatformContext";
 import { useFlowRepository } from "../../app/RepositoryContext";
 
 export function todosQueryKey(date: string) {
   return ["todos", date] as const;
+}
+
+function rolloverQueryKey(today: string) {
+  return ["todos-rollover", today] as const;
+}
+
+function previousLocalIsoDate(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const previous = new Date(year, month - 1, day - 1);
+  return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}-${String(previous.getDate()).padStart(2, "0")}`;
 }
 
 type PendingTodoPatch = { id: string; patch: TodoPatch };
@@ -21,11 +32,30 @@ function applyPendingPatches(todos: Todo[], patches: PendingTodoPatch[]) {
 }
 
 export function useTodos(date: string) {
+  const platform = usePlatform();
   const repository = useFlowRepository();
   const queryClient = useQueryClient();
+  const today = platform.today();
+  const shouldRollover = date === today;
+  const yesterday = shouldRollover ? previousLocalIsoDate(today) : null;
+  const rollover = useQuery({
+    queryKey: rolloverQueryKey(today),
+    enabled: shouldRollover,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const rolled = await repository.rolloverIncompleteTodos(yesterday!, today);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: todosQueryKey(yesterday!) }),
+        queryClient.invalidateQueries({ queryKey: todosQueryKey(today) }),
+      ]);
+      return rolled;
+    },
+  });
   const query = useQuery({
     queryKey: todosQueryKey(date),
     queryFn: async () => sortTodosForDate(await repository.listTodos(date), date),
+    enabled: !shouldRollover || rollover.isSuccess,
   });
 
   useEffect(() => {
@@ -36,7 +66,12 @@ export function useTodos(date: string) {
     return cleanup;
   }, [date, queryClient, repository]);
 
-  return query;
+  return {
+    ...query,
+    isPending: (shouldRollover && rollover.isPending) || query.isPending,
+    isError: (shouldRollover && rollover.isError) || query.isError,
+    error: shouldRollover ? rollover.error ?? query.error : query.error,
+  };
 }
 
 export function useTodoMutations(date: string) {
