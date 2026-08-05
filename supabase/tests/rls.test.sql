@@ -300,7 +300,7 @@ select throws_ok(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '', true);
 select throws_ok(
-  $$select * from public.rollover_incomplete_todos(current_date - 1, current_date)$$,
+  $$select * from public.rollover_incomplete_todos(current_date - 1, current_date, current_setting('TimeZone'))$$,
   'P0001',
   'authentication required',
   'unauthenticated callers cannot roll over To-dos'
@@ -322,7 +322,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select is(
-  (select count(*)::text from public.rollover_incomplete_todos(current_date - 1, current_date)),
+  (select count(*)::text from public.rollover_incomplete_todos(current_date - 1, current_date, current_setting('TimeZone'))),
   '1',
   'owner B rollover returns only owner B To-do'
 );
@@ -345,7 +345,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select is(
-  (select count(*)::text from public.rollover_incomplete_todos(current_date - 1, current_date)),
+  (select count(*)::text from public.rollover_incomplete_todos(current_date - 1, current_date, current_setting('TimeZone'))),
   '1',
   'owner A can later roll over its own To-do'
 );

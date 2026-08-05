@@ -53,6 +53,7 @@ function renderTodos(
   selectedDate = today,
   queryRetry: number | false = false,
   platformToday = today,
+  ownerIdentity?: string,
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: queryRetry, retryDelay: 1 } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -62,7 +63,7 @@ function renderTodos(
       </RepositoryProvider>
     </QueryClientProvider>
   );
-  return { queryClient, ...renderHook(() => useTodos(selectedDate), { wrapper }) };
+  return { queryClient, ...renderHook(() => useTodos(selectedDate, ownerIdentity), { wrapper }) };
 }
 
 describe("useTodos", () => {
@@ -166,6 +167,35 @@ describe("useTodos", () => {
     rerender();
 
     expect(rolloverCalls).toEqual([["2026-08-04", "2026-08-05"]]);
+  });
+
+  it("runs rollover again for a different owner in the same query client", async () => {
+    const { repository, rolloverCalls } = createRepository();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <RepositoryProvider value={repository}>
+          <PlatformProvider value={{ ...webPlatform, today: () => today }}>{children}</PlatformProvider>
+        </RepositoryProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = renderHook(
+      ({ ownerIdentity }) => useTodos(today, ownerIdentity),
+      { initialProps: { ownerIdentity: "owner-a" }, wrapper },
+    );
+
+    await waitFor(() => {
+      expect(rolloverCalls).toEqual([["2026-08-04", "2026-08-05"]]);
+    });
+
+    rerender({ ownerIdentity: "owner-b" });
+
+    await waitFor(() => {
+      expect(rolloverCalls).toEqual([
+        ["2026-08-04", "2026-08-05"],
+        ["2026-08-04", "2026-08-05"],
+      ]);
+    });
   });
 
   it("invalidates yesterday and today after a successful rollover", async () => {

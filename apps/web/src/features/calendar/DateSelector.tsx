@@ -25,7 +25,7 @@ export function DateSelector({ mode, value, onChange }: DateSelectorProps) {
   }
 
   return (
-    <div className="date-selector" data-mode={mode}>
+    <span className="date-selector" data-mode={mode}>
       <button
         type="button"
         className="todo-date-trigger"
@@ -37,13 +37,14 @@ export function DateSelector({ mode, value, onChange }: DateSelectorProps) {
       <input
         ref={inputRef}
         type="date"
-        aria-label="选择日期"
+        aria-hidden="true"
+        tabIndex={-1}
         className="sr-only"
         value={value}
         onChange={(event) => {
           if (event.target.value) onChange(event.target.value);
         }}
       />
-    </div>
+    </span>
   );
 }

@@ -1,10 +1,10 @@
 import { useAuth } from "./useAuth";
-import type { AuthPort } from "./useAuth";
+import type { AuthPort, AuthSession } from "./useAuth";
 import { LoginForm } from "./LoginForm";
 
 export interface AuthGateProps {
   auth: AuthPort;
-  children: React.ReactNode;
+  children: React.ReactNode | ((session: AuthSession) => React.ReactNode);
 }
 
 export function AuthGate({ auth, children }: AuthGateProps) {
@@ -19,5 +19,5 @@ export function AuthGate({ auth, children }: AuthGateProps) {
     );
   }
   if (!session) return <LoginForm auth={auth} />;
-  return <>{children}</>;
+  return <>{typeof children === "function" ? children(session) : children}</>;
 }

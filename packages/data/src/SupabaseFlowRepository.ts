@@ -150,6 +150,19 @@ function currentLocalIsoDate(): string {
   return formatLocalIsoDate(new Date());
 }
 
+function currentIanaTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function assertIanaTimeZone(timeZone: string): void {
+  if (!timeZone.trim()) throw new Error("device timezone must be a valid IANA timezone");
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format();
+  } catch {
+    throw new Error("device timezone must be a valid IANA timezone");
+  }
+}
+
 function assertNextDay(fromDate: string, toDate: string): void {
   if (toDate !== shiftCalendarDate(fromDate, 1)) {
     throw new Error("toDate must be the calendar day after fromDate");
@@ -318,10 +331,16 @@ export class SupabaseFlowRepository implements FlowRepository {
   readonly capabilities = { todoRollover: true } as const;
   private readonly client: SupabaseClientLike;
   private readonly currentLocalDate: () => string;
+  private readonly currentTimeZone: () => string;
 
-  constructor(client: unknown, currentLocalDate: () => string = currentLocalIsoDate) {
+  constructor(
+    client: unknown,
+    currentLocalDate: () => string = currentLocalIsoDate,
+    currentTimeZone: () => string = currentIanaTimeZone,
+  ) {
     this.client = client as SupabaseClientLike;
     this.currentLocalDate = currentLocalDate;
+    this.currentTimeZone = currentTimeZone;
   }
 
   async listTodos(date: string): Promise<Todo[]> {
@@ -370,9 +389,12 @@ export class SupabaseFlowRepository implements FlowRepository {
     const today = this.currentLocalDate();
     assertIsoDate(today);
     assertYesterdayToToday(fromDate, toDate, today);
+    const timeZone = this.currentTimeZone();
+    assertIanaTimeZone(timeZone);
     const data = await execute(this.client.rpc("rollover_incomplete_todos", {
       p_from_date: fromDate,
       p_to_date: toDate,
+      p_timezone: timeZone,
     }));
     return records(data).map(mapTodo);
   }

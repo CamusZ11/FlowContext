@@ -33,7 +33,7 @@ test("desktop compact controls do not expand or overlap across supported widths"
     const form = page.locator(".todo-form");
     const addButton = page.getByRole("button", { name: "添加" });
     const checkbox = page.getByRole("checkbox").first();
-    const title = page.getByRole("heading", { name: "今日待办" });
+    const dateTrigger = page.getByRole("button", { name: /^选择日期，当前 \d{4}-\d{2}-\d{2}$/ });
     const shellScrollWidth = await shell.evaluate((element) => element.scrollWidth);
     const shellClientWidth = await shell.evaluate((element) => element.clientWidth);
     const formBox = await form.boundingBox();
@@ -45,6 +45,6 @@ test("desktop compact controls do not expand or overlap across supported widths"
     expect(addBox?.width).toBeLessThanOrEqual(42);
     expect(addBox?.height).toBeLessThanOrEqual(42);
     expect(checkboxBox?.width).toBeLessThanOrEqual(20);
-    await expect(title).toHaveCSS("font-size", "18px");
+    await expect(dateTrigger).toHaveCSS("font-size", "18px");
   }
 });

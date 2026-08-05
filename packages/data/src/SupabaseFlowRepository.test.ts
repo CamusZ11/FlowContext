@@ -225,7 +225,11 @@ describe("SupabaseFlowRepository", () => {
       data: [{ ...todoRow, planned_date: "2026-08-05", planned_time: null }],
       error: null,
     });
-    const repo = new SupabaseFlowRepository(client, () => "2026-08-05");
+    const repo = new SupabaseFlowRepository(
+      client,
+      () => "2026-08-05",
+      () => "Asia/Shanghai",
+    );
 
     expect(repo.capabilities).toEqual({ todoRollover: true });
 
@@ -241,8 +245,26 @@ describe("SupabaseFlowRepository", () => {
 
     expect(client.rpcCalls).toEqual([{
       name: "rollover_incomplete_todos",
-      args: { p_from_date: "2026-08-04", p_to_date: "2026-08-05" },
+      args: {
+        p_from_date: "2026-08-04",
+        p_to_date: "2026-08-05",
+        p_timezone: "Asia/Shanghai",
+      },
     }]);
+  });
+
+  it("rejects an invalid device IANA timezone before the rollover RPC call", async () => {
+    const client = new RecordingSupabaseClient([]);
+    const repo = new SupabaseFlowRepository(
+      client,
+      () => "2026-08-05",
+      () => "Mars/Olympus_Mons",
+    );
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05"))
+      .rejects.toThrow("device timezone must be a valid IANA timezone");
+
+    expect(client.rpcCalls).toEqual([]);
   });
 
   it.each(["2026-02-30", "August 4, 2026"])("rejects an invalid rollover source date before the RPC call", async (fromDate) => {

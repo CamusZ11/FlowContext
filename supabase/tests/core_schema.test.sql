@@ -1,5 +1,5 @@
 begin;
-select plan(17);
+select plan(19);
 select has_table('topic_cards');
 select col_not_null('topic_cards', 'project_id');
 select col_not_null('todos', 'planned_date');
@@ -20,14 +20,14 @@ select ok(
   'handoffs enforce the Session-to-Topic binding'
 );
 select ok(
-  to_regprocedure('public.rollover_incomplete_todos(date,date)') is not null,
+  to_regprocedure('public.rollover_incomplete_todos(date,date,text)') is not null,
   'owner-scoped incomplete To-do rollover function exists'
 );
 select is(
   (
     select prosecdef::text
       from pg_proc
-     where oid = 'public.rollover_incomplete_todos(date,date)'::regprocedure
+     where oid = 'public.rollover_incomplete_todos(date,date,text)'::regprocedure
   ),
   'false',
   'To-do rollover uses SECURITY INVOKER'
@@ -35,12 +35,12 @@ select is(
 select ok(
   not has_function_privilege(
     'public',
-    'public.rollover_incomplete_todos(date,date)',
+    'public.rollover_incomplete_todos(date,date,text)',
     'execute'
   )
     and not has_function_privilege(
       'anon',
-      'public.rollover_incomplete_todos(date,date)',
+      'public.rollover_incomplete_todos(date,date,text)',
       'execute'
     ),
   'To-do rollover is not executable by PUBLIC or anon'
@@ -48,7 +48,7 @@ select ok(
 select ok(
   has_function_privilege(
     'authenticated',
-    'public.rollover_incomplete_todos(date,date)',
+    'public.rollover_incomplete_todos(date,date,text)',
     'execute'
   ),
   'authenticated can execute To-do rollover'
@@ -56,7 +56,7 @@ select ok(
 select ok(
   has_function_privilege(
     'service_role',
-    'public.rollover_incomplete_todos(date,date)',
+    'public.rollover_incomplete_todos(date,date,text)',
     'execute'
   ),
   'service_role can execute To-do rollover'
@@ -77,47 +77,81 @@ on conflict (id) do nothing;
 
 insert into public.todos (id, owner_id, title, planned_date, is_completed)
 values
-  ('50000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000011', 'Rollover pending', current_date - 1, false),
-  ('50000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000011', 'Rollover completed', current_date - 1, true),
-  ('50000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000011', 'Rollover older', current_date - 2, false);
+  ('50000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000011', 'Rollover pending', (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1, false),
+  ('50000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000011', 'Rollover completed', (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1, true),
+  ('50000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000011', 'Rollover older', (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 2, false);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select throws_ok(
-  $$select * from public.rollover_incomplete_todos(current_date - 3, current_date - 2)$$,
+  $$select * from public.rollover_incomplete_todos(
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 3,
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 2,
+    'Pacific/Kiritimati'
+  )$$,
   'P0001',
-  'rollover dates must target yesterday and today',
+  'rollover dates must target yesterday and today in the device timezone',
   'To-do rollover rejects an adjacent historical date pair'
 );
 
+select throws_ok(
+  $$select * from public.rollover_incomplete_todos(
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1,
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date,
+    'Mars/Olympus_Mons'
+  )$$,
+  'P0001',
+  'rollover timezone must be a valid IANA timezone',
+  'To-do rollover rejects an invalid device IANA timezone'
+);
+
+select throws_ok(
+  $$select * from public.rollover_incomplete_todos(
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1,
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date,
+    'Pacific/Pago_Pago'
+  )$$,
+  'P0001',
+  'rollover dates must target yesterday and today in the device timezone',
+  'To-do rollover derives today from the supplied device timezone'
+);
+
 select is(
-  (select count(*)::text from public.rollover_incomplete_todos(current_date - 1, current_date)),
+  (select count(*)::text from public.rollover_incomplete_todos(
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1,
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date,
+    'Pacific/Kiritimati'
+  )),
   '1',
   'To-do rollover returns the one incomplete To-do planned for yesterday'
 );
 
 select is(
   (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000011'),
-  current_date,
+  (statement_timestamp() at time zone 'Pacific/Kiritimati')::date,
   'To-do rollover moves the incomplete yesterday row to today'
 );
 
 select is(
   (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000012'),
-  current_date - 1,
+  (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1,
   'To-do rollover does not move completed rows'
 );
 
 select is(
   (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000013'),
-  current_date - 2,
+  (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 2,
   'To-do rollover does not move rows earlier than yesterday'
 );
 
 select is(
-  (select count(*)::text from public.rollover_incomplete_todos(current_date - 1, current_date)),
+  (select count(*)::text from public.rollover_incomplete_todos(
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date - 1,
+    (statement_timestamp() at time zone 'Pacific/Kiritimati')::date,
+    'Pacific/Kiritimati'
+  )),
   '0',
   'repeating To-do rollover returns no rows and does not duplicate work'
 );

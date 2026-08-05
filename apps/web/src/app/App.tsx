@@ -21,15 +21,17 @@ export interface AppProps {
 }
 
 export function App({ mode = "web", repository, platform, auth }: AppProps) {
-  const content = (
+  const content = (rolloverIdentity?: string) => (
     <AppProviders repository={repository} platform={{ ...platform, mode }}>
-      <AppContent mode={mode} />
+      <AppContent mode={mode} rolloverIdentity={rolloverIdentity} />
     </AppProviders>
   );
-  return auth ? <AuthGate auth={auth}>{content}</AuthGate> : content;
+  return auth
+    ? <AuthGate auth={auth}>{(session) => content(session.userId)}</AuthGate>
+    : content();
 }
 
-function AppContent({ mode }: { mode: "web" | "desktop" }) {
+function AppContent({ mode, rolloverIdentity }: { mode: "web" | "desktop"; rolloverIdentity?: string }) {
   const platform = usePlatform();
   const [selectedDate, setSelectedDate] = useSelectedDate(mode, platform);
   const projectionQuery = useDailyProjection(selectedDate);
@@ -51,7 +53,7 @@ function AppContent({ mode }: { mode: "web" | "desktop" }) {
           </div>
         </div>
       </header>
-      <TodoSection date={selectedDate} onDateChange={setSelectedDate} />
+      <TodoSection date={selectedDate} rolloverIdentity={rolloverIdentity} onDateChange={setSelectedDate} />
       <SuggestedTopics deviceId={platform.deviceId} />
       <DailyLens date={selectedDate} projection={projection} connectionState={connectionState} />
       <CodexReports projection={projection} />

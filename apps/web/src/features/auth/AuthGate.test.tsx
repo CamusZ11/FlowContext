@@ -60,6 +60,16 @@ describe("private authentication", () => {
     expect(await screen.findByText("private")).toBeInTheDocument();
   });
 
+  it("exposes the authenticated owner identity to private app content", async () => {
+    render(
+      <AuthGate auth={fakeAuth({ userId: "owner-2" })}>
+        {(session) => <div>owner:{session.userId}</div>}
+      </AuthGate>,
+    );
+
+    expect(await screen.findByText("owner:owner-2")).toBeInTheDocument();
+  });
+
   it("keeps login available when stored session verification fails", async () => {
     const user = userEvent.setup();
     render(<AuthGate auth={flakyAuth()}><div>private</div></AuthGate>);

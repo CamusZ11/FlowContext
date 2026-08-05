@@ -19,6 +19,7 @@ function platform(today: () => string): PlatformPort {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   window.history.replaceState({}, "", "/");
 });
 
@@ -65,5 +66,48 @@ describe("useSelectedDate", () => {
     currentToday = "2026-08-07";
     rerender();
     expect(result.current[0]).toBe("2026-08-19");
+  });
+
+  it("automatically follows today after an idle app crosses midnight", () => {
+    vi.useFakeTimers();
+    let currentToday = "2026-08-05";
+    const { result } = renderHook(() => useSelectedDate("desktop", platform(() => currentToday)));
+
+    currentToday = "2026-08-06";
+    act(() => vi.advanceTimersByTime(60_000));
+
+    expect(result.current[0]).toBe("2026-08-06");
+  });
+
+  it("refreshes a selected today on window focus", () => {
+    let currentToday = "2026-08-05";
+    const { result } = renderHook(() => useSelectedDate("desktop", platform(() => currentToday)));
+
+    currentToday = "2026-08-06";
+    act(() => window.dispatchEvent(new Event("focus")));
+
+    expect(result.current[0]).toBe("2026-08-06");
+  });
+
+  it("does not leave a historical selection when window focus refreshes today", () => {
+    let currentToday = "2026-08-05";
+    const { result } = renderHook(() => useSelectedDate("desktop", platform(() => currentToday)));
+
+    act(() => result.current[1]("2026-08-01"));
+    currentToday = "2026-08-06";
+    act(() => window.dispatchEvent(new Event("focus")));
+
+    expect(result.current[0]).toBe("2026-08-01");
+  });
+
+  it("refreshes a selected today when the document becomes visible", () => {
+    let currentToday = "2026-08-05";
+    const { result } = renderHook(() => useSelectedDate("web", platform(() => currentToday)));
+
+    currentToday = "2026-08-06";
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+
+    expect(result.current[0]).toBe("2026-08-06");
+    expect(window.location.search).toBe("?date=2026-08-06");
   });
 });

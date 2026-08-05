@@ -9,12 +9,13 @@ import "./todo.css";
 
 export interface TodoSectionProps {
   date: string;
+  rolloverIdentity?: string;
   onDateChange(value: string): void;
 }
 
-export function TodoSection({ date, onDateChange }: TodoSectionProps) {
+export function TodoSection({ date, rolloverIdentity, onDateChange }: TodoSectionProps) {
   const platform = usePlatform();
-  const query = useTodos(date);
+  const query = useTodos(date, rolloverIdentity);
   const mutations = useTodoMutations(date);
   const todos = query.data ?? [];
   const activeTodos = todos.filter((todo) => !todo.isCompleted);

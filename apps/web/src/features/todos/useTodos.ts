@@ -8,8 +8,8 @@ export function todosQueryKey(date: string) {
   return ["todos", date] as const;
 }
 
-function rolloverQueryKey(today: string) {
-  return ["todos-rollover", today] as const;
+function rolloverQueryKey(today: string, ownerIdentity: string) {
+  return ["todos-rollover", ownerIdentity, today] as const;
 }
 
 function previousLocalIsoDate(date: string): string {
@@ -31,7 +31,7 @@ function applyPendingPatches(todos: Todo[], patches: PendingTodoPatch[]) {
   });
 }
 
-export function useTodos(date: string) {
+export function useTodos(date: string, ownerIdentity = "unscoped") {
   const platform = usePlatform();
   const repository = useFlowRepository();
   const queryClient = useQueryClient();
@@ -40,7 +40,7 @@ export function useTodos(date: string) {
   const shouldRunRollover = shouldRollover && repository.capabilities.todoRollover;
   const yesterday = shouldRunRollover ? previousLocalIsoDate(today) : null;
   const rollover = useQuery({
-    queryKey: rolloverQueryKey(today),
+    queryKey: rolloverQueryKey(today, ownerIdentity),
     enabled: shouldRunRollover,
     staleTime: Infinity,
     retry: false,

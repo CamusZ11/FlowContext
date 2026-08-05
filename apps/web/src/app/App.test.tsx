@@ -33,7 +33,7 @@ describe("App shell", () => {
   it("uses the todo date selection for the Daily Lens", () => {
     render(<App mode="desktop" repository={fakeRepository} platform={webPlatform} />);
 
-    fireEvent.change(screen.getByLabelText("选择日期"), { target: { value: "2026-08-19" } });
+    fireEvent.change(document.querySelector('input[type="date"]')!, { target: { value: "2026-08-19" } });
 
     expect(screen.getByRole("button", { name: "选择日期，当前 2026-08-19" })).toBeInTheDocument();
     const dailyLens = screen.getByRole("heading", { name: "Daily Lens" }).closest("details");

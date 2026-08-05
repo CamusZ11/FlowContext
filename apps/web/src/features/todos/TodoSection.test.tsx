@@ -73,6 +73,7 @@ describe("TodoSection", () => {
     renderTodoSection({ listTodos: async () => [] });
 
     expect(screen.getByRole("button", { name: "选择日期，当前 2026-08-02" })).toHaveTextContent("08 / 02");
+    expect(document.querySelector("#todo-heading > .date-selector")?.tagName).toBe("SPAN");
     expect(await screen.findByText("这一天还没有安排")).toBeInTheDocument();
     expect(screen.queryByText("今天还没有安排。")).not.toBeInTheDocument();
   });
@@ -81,7 +82,7 @@ describe("TodoSection", () => {
     const onDateChange = vi.fn();
     renderTodoSection({ onDateChange });
 
-    fireEvent.change(screen.getByLabelText("选择日期"), { target: { value: "2026-08-19" } });
+    fireEvent.change(document.querySelector('input[type="date"]')!, { target: { value: "2026-08-19" } });
 
     expect(onDateChange).toHaveBeenCalledWith("2026-08-19");
   });
