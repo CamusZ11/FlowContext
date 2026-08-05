@@ -193,6 +193,15 @@ values
   ('50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Todo A', '2026-08-03', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001'),
   ('50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'Todo B', '2026-08-03', '10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002');
 
+-- The four rows below protect the To-do rollover boundary: exactly one
+-- incomplete row for owner A belongs to the immediately previous date.
+insert into public.todos (id, owner_id, title, planned_date, is_completed)
+values
+  ('50000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', 'Rollover A pending', '2026-08-04', false),
+  ('50000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000001', 'Rollover A completed', '2026-08-04', true),
+  ('50000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000001', 'Rollover A older', '2026-08-03', false),
+  ('50000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000002', 'Rollover B pending', '2026-08-04', false);
+
 -- Dedicated rows verify composite ON DELETE SET NULL actions.  The topic is
 -- removed first because its project FK is RESTRICT; the project can then be
 -- removed while the To-do owner remains unchanged.
@@ -298,6 +307,13 @@ select throws_ok(
 );
 
 set local role authenticated;
+select set_config('request.jwt.claim.sub', '', true);
+select throws_ok(
+  $$select * from public.rollover_incomplete_todos('2026-08-04', '2026-08-05')$$,
+  'P0001',
+  'authentication required',
+  'unauthenticated callers cannot roll over To-dos'
+);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
@@ -305,10 +321,57 @@ select is((select count(*)::text from public.project_projections), '2', 'authent
 select is((select count(*)::text from public.topic_cards), '2', 'authenticated sees only the owner topic cards');
 select is((select count(*)::text from public.sessions), '1', 'authenticated sees only the owner session');
 select is((select count(*)::text from public.handoffs), '2', 'authenticated sees only the owner handoffs');
-select is((select count(*)::text from public.todos), '2', 'authenticated sees only the owner todos');
+select is((select count(*)::text from public.todos), '5', 'authenticated sees only the owner todos');
 select is((select count(*)::text from public.daily_projections), '1', 'authenticated sees only the owner daily projection');
 select is((select count(*)::text from public.device_workspaces), '1', 'authenticated sees only the owner workspace');
 select is((select count(*)::text from public.todos where owner_id = '00000000-0000-0000-0000-000000000002'), '0', 'cross-owner todos are hidden by RLS');
+
+select throws_ok(
+  $$select * from public.rollover_incomplete_todos('2026-08-04', '2026-08-06')$$,
+  'P0001',
+  'rollover dates must be adjacent',
+  'To-do rollover rejects non-adjacent dates'
+);
+
+select is(
+  (select count(*)::text from public.rollover_incomplete_todos('2026-08-04', '2026-08-05')),
+  '1',
+  'To-do rollover returns the one incomplete To-do planned for the previous day'
+);
+
+select is(
+  (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000004'),
+  '2026-08-05'::date,
+  'To-do rollover moves the current owner incomplete previous-day row'
+);
+
+select is(
+  (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000005'),
+  '2026-08-04'::date,
+  'To-do rollover does not move completed rows'
+);
+
+select is(
+  (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000006'),
+  '2026-08-03'::date,
+  'To-do rollover does not move rows earlier than the source date'
+);
+
+set local role postgres;
+select is(
+  (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000007'),
+  '2026-08-04'::date,
+  'To-do rollover does not move another owner row'
+);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select is(
+  (select count(*)::text from public.rollover_incomplete_todos('2026-08-04', '2026-08-05')),
+  '0',
+  'repeating To-do rollover returns no rows and does not duplicate work'
+);
 
 select lives_ok($$
   insert into public.todos (title, planned_date)
@@ -429,6 +492,29 @@ select throws_ok($$
   insert into public.device_tokens (owner_id, device_id, token_hash)
   values ('00000000-0000-0000-0000-000000000001', 'mac-a-3', repeat('c', 64))
 $$, '42501', null, 'authenticated cannot insert device tokens');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select is(
+  (select count(*)::text from public.rollover_incomplete_todos('2026-08-04', '2026-08-05')),
+  '1',
+  'another authenticated owner can roll over only its own incomplete To-do'
+);
+
+select is(
+  (select planned_date from public.todos where id = '50000000-0000-0000-0000-000000000007'),
+  '2026-08-05'::date,
+  'another authenticated owner moves its own previous-day row'
+);
+
+set local role postgres;
+select ok(
+  (select planned_date = '2026-08-05'::date from public.todos where id = '50000000-0000-0000-0000-000000000004')
+    and (select planned_date = '2026-08-05'::date from public.todos where id = '50000000-0000-0000-0000-000000000007'),
+  'another owner rollover cannot re-move the target owner row'
+);
 
 select * from finish();
 rollback;
