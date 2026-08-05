@@ -132,12 +132,33 @@ function assertIsoDate(date: string): void {
   }
 }
 
+function formatLocalIsoDate(date: Date): string {
+  const year = String(date.getFullYear()).padStart(4, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function shiftCalendarDate(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const shifted = new Date(year, month - 1, day, 12);
+  shifted.setDate(shifted.getDate() + days);
+  return formatLocalIsoDate(shifted);
+}
+
+function currentLocalIsoDate(): string {
+  return formatLocalIsoDate(new Date());
+}
+
 function assertNextDay(fromDate: string, toDate: string): void {
-  const [year, month, day] = fromDate.split("-").map(Number);
-  const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
-  const expectedToDate = nextDay.toISOString().slice(0, 10);
-  if (toDate !== expectedToDate) {
+  if (toDate !== shiftCalendarDate(fromDate, 1)) {
     throw new Error("toDate must be the calendar day after fromDate");
+  }
+}
+
+function assertYesterdayToToday(fromDate: string, toDate: string, today: string): void {
+  if (fromDate !== shiftCalendarDate(today, -1) || toDate !== today) {
+    throw new Error("rolloverIncompleteTodos only supports yesterday to today");
   }
 }
 
@@ -295,9 +316,11 @@ async function execute(query: PromiseLike<QueryResult>): Promise<unknown> {
 
 export class SupabaseFlowRepository implements FlowRepository {
   private readonly client: SupabaseClientLike;
+  private readonly currentLocalDate: () => string;
 
-  constructor(client: unknown) {
+  constructor(client: unknown, currentLocalDate: () => string = currentLocalIsoDate) {
     this.client = client as SupabaseClientLike;
+    this.currentLocalDate = currentLocalDate;
   }
 
   async listTodos(date: string): Promise<Todo[]> {
@@ -343,6 +366,9 @@ export class SupabaseFlowRepository implements FlowRepository {
     assertIsoDate(fromDate);
     assertIsoDate(toDate);
     assertNextDay(fromDate, toDate);
+    const today = this.currentLocalDate();
+    assertIsoDate(today);
+    assertYesterdayToToday(fromDate, toDate, today);
     const data = await execute(this.client.rpc("rollover_incomplete_todos", {
       p_from_date: fromDate,
       p_to_date: toDate,

@@ -225,7 +225,7 @@ describe("SupabaseFlowRepository", () => {
       data: [{ ...todoRow, planned_date: "2026-08-05", planned_time: null }],
       error: null,
     });
-    const repo = new SupabaseFlowRepository(client);
+    const repo = new SupabaseFlowRepository(client, () => "2026-08-05");
 
     await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).resolves.toEqual([{
       id: "todo-1",
@@ -264,10 +264,28 @@ describe("SupabaseFlowRepository", () => {
     expect(client.rpcCalls).toEqual([]);
   });
 
+  it("rejects a historical adjacent date pair before the RPC call", async () => {
+    const client = new RecordingSupabaseClient([]);
+    const repo = new SupabaseFlowRepository(client, () => "2026-08-05");
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-03", "2026-08-04")).rejects.toThrow();
+
+    expect(client.rpcCalls).toEqual([]);
+  });
+
+  it("rejects a future adjacent date pair before the RPC call", async () => {
+    const client = new RecordingSupabaseClient([]);
+    const repo = new SupabaseFlowRepository(client, () => "2026-08-05");
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-05", "2026-08-06")).rejects.toThrow();
+
+    expect(client.rpcCalls).toEqual([]);
+  });
+
   it("propagates an atomic rollover RPC error unchanged", async () => {
     const error = new Error("database denied rollover");
     const client = new RecordingSupabaseClient([], undefined, {}, { data: null, error });
-    const repo = new SupabaseFlowRepository(client);
+    const repo = new SupabaseFlowRepository(client, () => "2026-08-05");
 
     await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).rejects.toBe(error);
   });
