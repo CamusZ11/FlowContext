@@ -50,7 +50,7 @@ describe("SuggestedTopics", () => {
     expect(await screen.findAllByTestId("topic-card")).toHaveLength(3);
   });
 
-  it("disables handed-off cards without a current device path", () => {
+  it("explains why a handed-off card without a current device path cannot continue", () => {
     const topic = makeTopic("handed-off", {
       latestHandoffId: "handoff-1",
     });
@@ -72,8 +72,29 @@ describe("SuggestedTopics", () => {
         />
       </AppProviders>,
     );
-    expect(screen.getByText("先配置此设备项目路径")).toBeInTheDocument();
+    expect(screen.getByText("下次 Handoff 将自动配置此设备")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续此主题" })).toBeDisabled();
+  });
+
+  it("shows a preparation state while production topic context is loading", async () => {
+    const topic = makeTopic("loading-topic");
+    const repository: FlowRepository = {
+      ...fakeRepository,
+      listSuggestedTopics: async () => [topic],
+      getTopicContext: async () => new Promise(() => undefined),
+    };
+    render(
+      <AppProviders
+        repository={repository}
+        platform={webPlatform}
+        queryClient={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SuggestedTopics />
+      </AppProviders>,
+    );
+
+    expect(await screen.findByRole("button", { name: "正在准备继续…" })).toBeDisabled();
+    expect(screen.getByText("正在加载当前设备的继续信息")).toBeInTheDocument();
   });
 
   it("loads production session context and opens the current Codex thread", async () => {
@@ -97,7 +118,11 @@ describe("SuggestedTopics", () => {
       }),
     };
     render(
-      <AppProviders repository={repository} platform={{ ...webPlatform, deviceId: "mac-1", openExternal }}>
+      <AppProviders
+        repository={repository}
+        platform={{ ...webPlatform, deviceId: "mac-1", openExternal }}
+        queryClient={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
         <SuggestedTopics deviceId="mac-1" />
       </AppProviders>,
     );

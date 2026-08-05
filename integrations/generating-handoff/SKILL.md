@@ -12,7 +12,7 @@ description: 在用户确认后生成不可变 FlowContext Handoff，并保护 T
 2. 使用当前 Session 的绑定 Topic Card，整理已完成、当前状态、停止点、下一步、开放问题和需要用户确认的事实。
 3. 展示 Handoff 草稿，等待用户明确确认或修正。未确认时不得调用写入命令。
 4. 确认后将正文写入临时 JSON 文件，使用稳定的 `idempotencyKey` 调用 `persist-handoff.sh`；不得把正文放在命令参数或 shell history。JSON 必须含 `sessionId`、`topicCardId`、`content`、`idempotencyKey`，可含 `topicUpdate.currentState`、`topicUpdate.nextAction` 与 `topicUpdate.openQuestions`。
-5. 云端通过单个原子写入校验 `Session -> Topic Card -> Project` 归属后，插入不可变 Handoff，并同步更新允许的 Topic 连续性字段；不得传入或修改 Project ID、Topic state、`latestHandoffId` 或 `lastActiveAt`，后两项由数据库维护。
+5. 云端通过单个原子写入校验 `Session -> Topic Card -> Project` 归属后，插入不可变 Handoff、同步更新允许的 Topic 连续性字段，并用该 Session 已保存的 `deviceId`、`platform`、`workspacePath` 自动 upsert 当前设备的 Project 工作区映射；不得从 Handoff JSON 传入路径、平台或 Project ID，也不得修改 Topic state、`latestHandoffId` 或 `lastActiveAt`，后两项由数据库维护。旧 Session 未保存平台时，写入必须整体失败而非猜测平台。
 6. 写入云数据库成功后只输出 Handoff ID、Topic/Session ID 和成功状态，不输出完整正文或 token。重试沿用同一个幂等标识。
 7. Project 层事实必须另行展示 Obsidian 同步草稿，得到独立确认后才写回 Obsidian。
 ## done 保护

@@ -79,6 +79,7 @@ export function SuggestedTopics({ topics, deviceId, deviceWorkspace = null, topi
             key={topic.id}
             topic={{ ...topic, ...topicContexts[topic.id] }}
             currentWorkspace={deviceWorkspace}
+            isContextLoading={topics === undefined && contextQuery.isPending}
             onOpen={(url) => platform.openExternal(url)}
           />
         ))}
