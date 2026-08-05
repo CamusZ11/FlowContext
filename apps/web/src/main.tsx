@@ -45,6 +45,7 @@ function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics
       todos = todos.filter((todo) => todo.id !== id);
       if (old) notify(old.plannedDate);
     },
+    rolloverIncompleteTodos: async () => [],
     subscribeTodos: (date, listener) => {
       const callback = (changedDate: string) => {
         if (changedDate === date) void Promise.resolve(todos.filter((todo) => todo.plannedDate === date)).then(listener);

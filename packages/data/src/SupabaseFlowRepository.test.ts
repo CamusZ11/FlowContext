@@ -106,13 +106,21 @@ class RecordingSupabaseClient {
   readonly rows: unknown[];
   readonly channels: RecordingChannel[] = [];
   readonly removedChannels: RecordingChannel[] = [];
+  readonly rpcCalls: Array<{ name: string; args: Record<string, unknown> | undefined }> = [];
   fromCalls = 0;
   lastQuery: { table: string; eq: [string, unknown] } | undefined;
   response: QueryResponse;
+  rpcResponse: QueryResponse;
 
-  constructor(rows: unknown[], response?: QueryResponse, private readonly tableResponses: Record<string, QueryResponse> = {}) {
+  constructor(
+    rows: unknown[],
+    response?: QueryResponse,
+    private readonly tableResponses: Record<string, QueryResponse> = {},
+    rpcResponse?: QueryResponse,
+  ) {
     this.rows = rows;
     this.response = response ?? { data: rows, error: null };
+    this.rpcResponse = rpcResponse ?? this.response;
   }
 
   from(table: string): RecordingQueryBuilder {
@@ -129,6 +137,11 @@ class RecordingSupabaseClient {
   removeChannel(channel: RecordingChannel): Promise<"ok"> {
     this.removedChannels.push(channel);
     return Promise.resolve("ok");
+  }
+
+  rpc(name: string, args?: Record<string, unknown>): Promise<QueryResponse> {
+    this.rpcCalls.push({ name, args });
+    return Promise.resolve(this.rpcResponse);
   }
 }
 
@@ -205,6 +218,58 @@ describe("SupabaseFlowRepository", () => {
     await expect(repo.deleteTodo("todo-1")).resolves.toBeUndefined();
 
     expect(client.lastQuery).toEqual({ table: "todos", eq: ["id", "todo-1"] });
+  });
+
+  it("rolls incomplete todos into the next calendar date through the atomic RPC", async () => {
+    const client = new RecordingSupabaseClient([], undefined, {}, {
+      data: [{ ...todoRow, planned_date: "2026-08-05", planned_time: null }],
+      error: null,
+    });
+    const repo = new SupabaseFlowRepository(client);
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).resolves.toEqual([{
+      id: "todo-1",
+      title: "Read the brief",
+      plannedDate: "2026-08-05",
+      plannedTime: null,
+      isCompleted: false,
+      projectId: "project-1",
+      topicCardId: "topic-1",
+    }]);
+
+    expect(client.rpcCalls).toEqual([{
+      name: "rollover_incomplete_todos",
+      args: { p_from_date: "2026-08-04", p_to_date: "2026-08-05" },
+    }]);
+  });
+
+  it.each(["2026-02-30", "August 4, 2026"])("rejects an invalid rollover source date before the RPC call", async (fromDate) => {
+    const client = new RecordingSupabaseClient([]);
+    const repo = new SupabaseFlowRepository(client);
+
+    await expect(repo.rolloverIncompleteTodos(fromDate, "2026-08-05")).rejects.toThrow();
+
+    expect(client.rpcCalls).toEqual([]);
+  });
+
+  it.each([
+    ["2026-08-04", "2026-08-04"],
+    ["2026-08-04", "2026-08-06"],
+  ])("rejects a rollover target that is not the next day before the RPC call", async (fromDate, toDate) => {
+    const client = new RecordingSupabaseClient([]);
+    const repo = new SupabaseFlowRepository(client);
+
+    await expect(repo.rolloverIncompleteTodos(fromDate, toDate)).rejects.toThrow();
+
+    expect(client.rpcCalls).toEqual([]);
+  });
+
+  it("propagates an atomic rollover RPC error unchanged", async () => {
+    const error = new Error("database denied rollover");
+    const client = new RecordingSupabaseClient([], undefined, {}, { data: null, error });
+    const repo = new SupabaseFlowRepository(client);
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).rejects.toBe(error);
   });
 
   it("maps daily projections and suggested topics as reads", async () => {

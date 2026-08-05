@@ -33,6 +33,7 @@ function renderTodoSection(options: {
       return rows.find((row) => row.id === id)!;
     }),
     deleteTodo: async (id) => { rows = rows.filter((row) => row.id !== id); },
+    rolloverIncompleteTodos: async () => [],
     subscribeTodos: options.subscribeTodos ?? (() => () => undefined),
     listSuggestedTopics: async () => [],
     getTopicContext: async () => null,

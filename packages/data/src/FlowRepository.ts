@@ -28,6 +28,7 @@ export interface FlowRepository {
   createTodo(input: TodoCreate): Promise<Todo>;
   updateTodo(id: string, patch: TodoPatch): Promise<Todo>;
   deleteTodo(id: string): Promise<void>;
+  rolloverIncompleteTodos(fromDate: string, toDate: string): Promise<Todo[]>;
   subscribeTodos(date: string, listener: TodoListener): TodoSubscriptionCleanup;
   listSuggestedTopics(limit: number): Promise<TopicCard[]>;
   getTopicContext(topicId: string, deviceId?: string): Promise<TopicContext | null>;

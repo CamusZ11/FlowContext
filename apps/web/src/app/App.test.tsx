@@ -8,6 +8,7 @@ const fakeRepository: FlowRepository = {
   createTodo: async () => { throw new Error("not used"); },
   updateTodo: async () => { throw new Error("not used"); },
   deleteTodo: async () => undefined,
+  rolloverIncompleteTodos: async () => [],
   subscribeTodos: () => () => undefined,
   listSuggestedTopics: async () => [],
   getTopicContext: async () => null,

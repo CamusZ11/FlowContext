@@ -37,6 +37,7 @@ export interface SupabaseChannelLike {
 
 export interface SupabaseClientLike {
   from(table: string): unknown;
+  rpc(name: string, args?: Record<string, unknown>): PromiseLike<QueryResult>;
   channel(name: string): unknown;
   removeChannel?(channel: unknown): Promise<unknown> | unknown;
 }
@@ -128,6 +129,15 @@ function assertIsoDate(date: string): void {
     candidate.getUTCDate() !== day
   ) {
     throw new Error("date must be a valid calendar date");
+  }
+}
+
+function assertNextDay(fromDate: string, toDate: string): void {
+  const [year, month, day] = fromDate.split("-").map(Number);
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+  const expectedToDate = nextDay.toISOString().slice(0, 10);
+  if (toDate !== expectedToDate) {
+    throw new Error("toDate must be the calendar day after fromDate");
   }
 }
 
@@ -277,7 +287,7 @@ function toTodoPatch(patch: TodoPatch): Record<string, unknown> {
   return row;
 }
 
-async function execute(query: SupabaseQueryLike): Promise<unknown> {
+async function execute(query: PromiseLike<QueryResult>): Promise<unknown> {
   const result = await query;
   if (result.error !== null && result.error !== undefined) throw result.error;
   return result.data;
@@ -327,6 +337,17 @@ export class SupabaseFlowRepository implements FlowRepository {
 
   async deleteTodo(id: string): Promise<void> {
     await execute((this.client.from("todos") as SupabaseQueryLike).delete().eq("id", id));
+  }
+
+  async rolloverIncompleteTodos(fromDate: string, toDate: string): Promise<Todo[]> {
+    assertIsoDate(fromDate);
+    assertIsoDate(toDate);
+    assertNextDay(fromDate, toDate);
+    const data = await execute(this.client.rpc("rollover_incomplete_todos", {
+      p_from_date: fromDate,
+      p_to_date: toDate,
+    }));
+    return records(data).map(mapTodo);
   }
 
   subscribeTodos(date: string, listener: TodoListener): () => void {

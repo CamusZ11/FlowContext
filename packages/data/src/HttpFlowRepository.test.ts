@@ -109,6 +109,21 @@ describe("HttpFlowRepository", () => {
     }));
   });
 
+  it("rejects rollover because the self-hosted provider has no atomic rollover endpoint", async () => {
+    const fetchImpl = vi.fn();
+    const repo = new HttpFlowRepository({
+      baseUrl: "https://flowcontext.example.com",
+      getAccessToken: () => "session-token",
+      fetchImpl,
+    });
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).rejects.toThrow(
+      "rolloverIncompleteTodos is not supported by the self-hosted provider",
+    );
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("maps every FlowRepository route and omits undefined patch fields", async () => {
     const topic = {
       id: "topic-1",

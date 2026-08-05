@@ -413,6 +413,10 @@ export class HttpFlowRepository implements FlowRepository {
     await this.transport.request<unknown>(`/v1/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
+  async rolloverIncompleteTodos(_fromDate: string, _toDate: string): Promise<Todo[]> {
+    throw new Error("rolloverIncompleteTodos is not supported by the self-hosted provider");
+  }
+
   subscribeTodos(date: string, listener: TodoListener): () => void {
     assertIsoDate(date);
     return startTodoSubscription(this.transport, date, listener);
