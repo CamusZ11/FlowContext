@@ -20,6 +20,10 @@ begin
     raise exception 'rollover dates must be adjacent';
   end if;
 
+  if p_from_date <> current_date - 1 or p_to_date <> current_date then
+    raise exception 'rollover dates must target yesterday and today';
+  end if;
+
   if v_owner_id is null then
     raise exception 'authentication required';
   end if;
