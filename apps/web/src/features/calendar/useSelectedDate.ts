@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isoDateSchema } from "@flowcontext/domain";
 import type { PlatformPort } from "../../platform/PlatformPort";
 
@@ -13,13 +13,19 @@ function queryDate(): string | null {
 
 export function useSelectedDate(mode: "web" | "desktop", platform: PlatformPort): [string, (value: string) => void] {
   const today = platform.today();
-  const [selectedDate, setSelectedDate] = useState(() => mode === "web" ? validDate(queryDate(), today) : today);
+  const [selectedDate, setSelectedDate] = useState(() => validDate(queryDate(), today));
+  const previousToday = useRef(today);
 
   useEffect(() => {
-    if (mode === "desktop") {
-      setSelectedDate(today);
-      return;
+    if (previousToday.current !== today) {
+      const oldToday = previousToday.current;
+      setSelectedDate((current) => current === oldToday ? today : current);
+      previousToday.current = today;
     }
+  }, [today]);
+
+  useEffect(() => {
+    if (mode === "desktop") return;
     const handlePopState = () => setSelectedDate(validDate(queryDate(), today));
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -27,7 +33,7 @@ export function useSelectedDate(mode: "web" | "desktop", platform: PlatformPort)
 
   function changeDate(value: string) {
     const next = validDate(value, today);
-    setSelectedDate(mode === "desktop" ? today : next);
+    setSelectedDate(next);
     if (mode === "web" && typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("date", next);
@@ -35,5 +41,5 @@ export function useSelectedDate(mode: "web" | "desktop", platform: PlatformPort)
     }
   }
 
-  return [mode === "desktop" ? today : selectedDate, changeDate];
+  return [selectedDate, changeDate];
 }

@@ -4,13 +4,11 @@ import { ClockIcon, PlusIcon } from "../../ui/icons";
 
 export interface TodoFormProps {
   date: string;
-  mode: "web" | "desktop";
   onCreate(input: TodoCreate): Promise<void>;
 }
 
-export function TodoForm({ date, mode, onCreate }: TodoFormProps) {
+export function TodoForm({ date, onCreate }: TodoFormProps) {
   const [title, setTitle] = useState("");
-  const [plannedDate, setPlannedDate] = useState(date);
   const [plannedTime, setPlannedTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,13 +16,13 @@ export function TodoForm({ date, mode, onCreate }: TodoFormProps) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedTitle = title.trim();
-    if (!normalizedTitle || !plannedDate) return;
+    if (!normalizedTitle) return;
     setSaving(true);
     setError(null);
     try {
       await onCreate({
         title: normalizedTitle,
-        plannedDate: mode === "desktop" ? date : plannedDate,
+        plannedDate: date,
         plannedTime: plannedTime || null,
         isCompleted: false,
         projectId: null,
@@ -32,7 +30,6 @@ export function TodoForm({ date, mode, onCreate }: TodoFormProps) {
       });
       setTitle("");
       setPlannedTime("");
-      if (mode === "web") setPlannedDate(date);
     } catch {
       setError("保存失败，请重试");
     } finally {
@@ -51,18 +48,6 @@ export function TodoForm({ date, mode, onCreate }: TodoFormProps) {
         onChange={(event) => setTitle(event.target.value)}
         required
       />
-      {mode === "web" ? (
-        <label>
-          <span className="sr-only">计划日期</span>
-          <input
-            type="date"
-            aria-label="计划日期"
-            value={plannedDate}
-            onChange={(event) => setPlannedDate(event.target.value)}
-            required
-          />
-        </label>
-      ) : null}
       <label className="todo-time-field">
         <span className="sr-only">计划时刻</span>
         <ClockIcon className="todo-time-icon" width="20" height="20" />

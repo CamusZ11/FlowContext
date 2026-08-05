@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FlowRepository } from "@flowcontext/data";
 import type { Todo } from "@flowcontext/domain";
@@ -19,8 +19,10 @@ const seed: Todo[] = [
 
 function renderTodoSection(options: {
   date?: string;
+  onDateChange?: (value: string) => void;
   platform?: PlatformPort;
   listTodos?: FlowRepository["listTodos"];
+  createTodo?: FlowRepository["createTodo"];
   updateTodo?: FlowRepository["updateTodo"];
   subscribeTodos?: FlowRepository["subscribeTodos"];
   rolloverIncompleteTodos?: FlowRepository["rolloverIncompleteTodos"];
@@ -29,11 +31,11 @@ function renderTodoSection(options: {
   const repository: FlowRepository = {
     capabilities: { todoRollover: true },
     listTodos: options.listTodos ?? (async () => rows),
-    createTodo: async (input) => {
+    createTodo: options.createTodo ?? (async (input) => {
       const todo = { ...input, id: "new" };
       rows = [...rows, todo];
       return todo;
-    },
+    }),
     updateTodo: options.updateTodo ?? (async (id, patch) => {
       rows = rows.map((row) => row.id === id ? { ...row, ...patch } : row);
       return rows.find((row) => row.id === id)!;
@@ -50,7 +52,7 @@ function renderTodoSection(options: {
     <QueryClientProvider client={queryClient}>
       <RepositoryProvider value={repository}>
         <PlatformProvider value={options.platform ?? webPlatform}>
-          <TodoSection date={options.date ?? date} />
+          <TodoSection date={options.date ?? date} onDateChange={options.onDateChange ?? vi.fn()} />
         </PlatformProvider>
       </RepositoryProvider>
     </QueryClientProvider>,
@@ -65,6 +67,35 @@ describe("TodoSection", () => {
     expect(screen.getByText("done task")).toHaveClass("completed");
     expect(screen.getByRole("button", { name: "编辑 上午任务" })).toHaveAttribute("data-icon-button", "true");
     expect(screen.getByRole("button", { name: "删除 上午任务" })).toHaveAttribute("data-icon-button", "true");
+  });
+
+  it("shows the selected date as the todo heading and uses neutral empty copy", async () => {
+    renderTodoSection({ listTodos: async () => [] });
+
+    expect(screen.getByRole("button", { name: "选择日期，当前 2026-08-02" })).toHaveTextContent("08 / 02");
+    expect(await screen.findByText("这一天还没有安排")).toBeInTheDocument();
+    expect(screen.queryByText("今天还没有安排。")).not.toBeInTheDocument();
+  });
+
+  it("sends date selections from its heading to the shared date state", () => {
+    const onDateChange = vi.fn();
+    renderTodoSection({ onDateChange });
+
+    fireEvent.change(screen.getByLabelText("选择日期"), { target: { value: "2026-08-19" } });
+
+    expect(onDateChange).toHaveBeenCalledWith("2026-08-19");
+  });
+
+  it("creates a todo for the date currently being viewed", async () => {
+    const createTodo = vi.fn(async (input) => ({ ...input, id: "new" }));
+    renderTodoSection({ date: "2026-08-19", createTodo });
+
+    await userEvent.type(screen.getByLabelText("添加事项"), "历史日任务");
+    await userEvent.click(screen.getByRole("button", { name: "添加" }));
+
+    await waitFor(() => {
+      expect(createTodo).toHaveBeenCalledWith(expect.objectContaining({ plannedDate: "2026-08-19" }));
+    });
   });
 
   it("keeps the old checkbox value when the server rejects", async () => {

@@ -2,7 +2,6 @@ import type { FlowRepository } from "@flowcontext/data";
 import { AppProviders } from "./AppProviders";
 import type { PlatformPort } from "../platform/PlatformPort";
 import { usePlatform } from "./PlatformContext";
-import { DateSelector } from "../features/calendar/DateSelector";
 import { useSelectedDate } from "../features/calendar/useSelectedDate";
 import { TodoSection } from "../features/todos/TodoSection";
 import { SuggestedTopics } from "../features/topics/SuggestedTopics";
@@ -45,7 +44,6 @@ function AppContent({ mode }: { mode: "web" | "desktop" }) {
             <p className="eyebrow">FLOWCONTEXT</p>
           </div>
           <div className="brand-meta">
-            <DateSelector mode={mode} value={selectedDate} onChange={setSelectedDate} />
             <div className="header-actions">
               <SyncedCloudIcon data-testid="synced-mark" className="status-icon" width="19" height="19" />
               <ConnectionStatus state={connectionState} />
@@ -53,7 +51,7 @@ function AppContent({ mode }: { mode: "web" | "desktop" }) {
           </div>
         </div>
       </header>
-      <TodoSection date={selectedDate} />
+      <TodoSection date={selectedDate} onDateChange={setSelectedDate} />
       <SuggestedTopics deviceId={platform.deviceId} />
       <DailyLens date={selectedDate} projection={projection} connectionState={connectionState} />
       <CodexReports projection={projection} />
