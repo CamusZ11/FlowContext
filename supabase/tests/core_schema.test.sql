@@ -1,8 +1,9 @@
 begin;
-select plan(19);
+select plan(22);
 select has_table('topic_cards');
 select col_not_null('topic_cards', 'project_id');
 select col_not_null('todos', 'planned_date');
+select has_column('sessions', 'platform', 'sessions retain their captured platform');
 select has_trigger('handoffs', 'reject_handoff_mutation');
 select ok(
   to_regprocedure(
@@ -18,6 +19,33 @@ select ok(
        and conrelid = 'public.handoffs'::regclass
   ),
   'handoffs enforce the Session-to-Topic binding'
+);
+select is(
+  (
+    select prosecdef::text
+      from pg_proc
+     where oid = 'public.create_handoff_and_update_topic(uuid,uuid,uuid,text,text,text,text,jsonb)'::regprocedure
+  ),
+  'false',
+  'atomic Handoff workspace binding uses SECURITY INVOKER'
+);
+select ok(
+  not has_function_privilege(
+    'public',
+    'public.create_handoff_and_update_topic(uuid,uuid,uuid,text,text,text,text,jsonb)',
+    'execute'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.create_handoff_and_update_topic(uuid,uuid,uuid,text,text,text,text,jsonb)',
+      'execute'
+    )
+    and has_function_privilege(
+      'service_role',
+      'public.create_handoff_and_update_topic(uuid,uuid,uuid,text,text,text,text,jsonb)',
+      'execute'
+    ),
+  'atomic Handoff workspace binding is executable only by service_role'
 );
 select ok(
   to_regprocedure('public.rollover_incomplete_todos(date,date,text)') is not null,

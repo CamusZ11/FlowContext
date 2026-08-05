@@ -154,6 +154,7 @@ export class SupabaseApiRepository implements ApiRepository {
       topic_card_id: input.topicCardId,
       codex_thread_id: input.codexThreadId,
       device_id: input.deviceId,
+      platform: input.platform,
       workspace_path: input.workspacePath,
       started_at: input.startedAt,
       ended_at: input.endedAt,
@@ -425,11 +426,16 @@ function mapTopic(row: TopicRow): TopicCard {
 }
 
 function mapSession(row: SessionRow): Session {
+  const platform = row.platform;
+  if (platform !== undefined && platform !== null && platform !== "macos" && platform !== "windows") {
+    throw new ApiError(502, "session_mapping");
+  }
   return {
     id: requiredString(row, "id", "session_mapping"),
     topicCardId: requiredString(row, "topic_card_id", "session_mapping"),
     codexThreadId: requiredString(row, "codex_thread_id", "session_mapping"),
     deviceId: requiredString(row, "device_id", "session_mapping"),
+    platform: platform ?? null,
     workspacePath: requiredString(row, "workspace_path", "session_mapping"),
     startedAt: requiredString(row, "started_at", "session_mapping"),
     endedAt: nullableString(row, "ended_at", "session_mapping"),

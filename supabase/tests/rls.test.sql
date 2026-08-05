@@ -173,10 +173,11 @@ values
   ('20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'Topic B', '', '');
 
 insert into public.sessions
-  (id, owner_id, topic_card_id, codex_thread_id, device_id, workspace_path)
+  (id, owner_id, topic_card_id, codex_thread_id, device_id, platform, workspace_path)
 values
-  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'thread-a', 'mac-a', '/workspace/a'),
-  ('30000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 'thread-b', 'win-b', 'F:/workspace/b');
+  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'thread-a', 'mac-a', 'macos', '/workspace/a'),
+  ('30000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 'thread-b', 'win-b', 'windows', 'F:/workspace/b'),
+  ('30000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'thread-legacy', 'mac-legacy', null, '/legacy/workspace');
 
 insert into public.handoffs
   (id, owner_id, session_id, topic_card_id, content, idempotency_key)
@@ -218,7 +219,7 @@ values
 insert into public.device_workspaces
   (owner_id, device_id, platform, project_id, workspace_path)
 values
-  ('00000000-0000-0000-0000-000000000001', 'mac-a', 'macos', '10000000-0000-0000-0000-000000000001', '/workspace/a'),
+  ('00000000-0000-0000-0000-000000000001', 'mac-a', 'macos', '10000000-0000-0000-0000-000000000001', '/outdated/workspace'),
   ('00000000-0000-0000-0000-000000000002', 'win-b', 'windows', '10000000-0000-0000-0000-000000000002', 'F:/workspace/b');
 
 insert into public.device_tokens (owner_id, device_id, token_hash)
@@ -253,6 +254,18 @@ select is(
 
 select is(
   (
+    select platform || '|' || workspace_path
+      from public.device_workspaces
+     where owner_id = '00000000-0000-0000-0000-000000000001'
+       and device_id = 'mac-a'
+       and project_id = '10000000-0000-0000-0000-000000000001'
+  ),
+  'macos|/workspace/a',
+  'atomic Handoff derives and upserts the originating Session workspace'
+);
+
+select is(
+  (
     select public.create_handoff_and_update_topic(
       '00000000-0000-0000-0000-000000000001',
       '30000000-0000-0000-0000-000000000001',
@@ -277,6 +290,46 @@ select is(
   ),
   '1',
   'atomic Handoff retry retains one immutable record'
+);
+
+select throws_ok(
+  $$
+    select public.create_handoff_and_update_topic(
+      '00000000-0000-0000-0000-000000000001',
+      '30000000-0000-0000-0000-000000000003',
+      '20000000-0000-0000-0000-000000000001',
+      'legacy platform handoff',
+      'legacy-platform-handoff',
+      null,
+      null,
+      null
+    )
+  $$,
+  '23514',
+  'session platform is required',
+  'legacy Session without a captured platform cannot partially create a Handoff'
+);
+
+select is(
+  (
+    select count(*)::text
+      from public.handoffs
+     where owner_id = '00000000-0000-0000-0000-000000000001'
+       and idempotency_key = 'legacy-platform-handoff'
+  ),
+  '0',
+  'unknown-platform Handoff leaves no immutable record behind'
+);
+
+select is(
+  (
+    select count(*)::text
+      from public.device_workspaces
+     where owner_id = '00000000-0000-0000-0000-000000000001'
+       and device_id = 'mac-legacy'
+  ),
+  '0',
+  'unknown-platform Handoff leaves no workspace mapping behind'
 );
 
 select throws_ok(
@@ -310,7 +363,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select is((select count(*)::text from public.project_projections), '2', 'authenticated sees only the owner project projections');
 select is((select count(*)::text from public.topic_cards), '2', 'authenticated sees only the owner topic cards');
-select is((select count(*)::text from public.sessions), '1', 'authenticated sees only the owner session');
+select is((select count(*)::text from public.sessions), '2', 'authenticated sees only the owner sessions, including the legacy platform-unknown row');
 select is((select count(*)::text from public.handoffs), '2', 'authenticated sees only the owner handoffs');
 select is((select count(*)::text from public.todos), '2', 'authenticated sees only the owner todos');
 select is((select count(*)::text from public.daily_projections), '1', 'authenticated sees only the owner daily projection');

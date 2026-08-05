@@ -83,6 +83,7 @@ type DatabaseSessionRow = {
   topic_card_id: string;
   codex_thread_id: string;
   device_id: string;
+  platform?: Session["platform"];
   workspace_path: string;
   started_at: string;
   ended_at?: string | null;
@@ -255,6 +256,7 @@ function mapSession(row: unknown): Session {
     topicCardId: value.topic_card_id,
     codexThreadId: value.codex_thread_id,
     deviceId: value.device_id,
+    platform: value.platform ?? null,
     workspacePath: value.workspace_path,
     startedAt: value.started_at,
     endedAt: value.ended_at ?? null,

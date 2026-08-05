@@ -193,6 +193,7 @@ class FakeRepository implements ApiRepository, TokenLookup {
       topicCardId: input.topicCardId ?? "topic-1",
       codexThreadId: input.codexThreadId ?? "thread-1",
       deviceId: input.deviceId ?? fixedPrincipal.deviceId,
+      platform: input.platform,
       workspacePath: input.workspacePath ?? "/workspace",
       startedAt: input.startedAt ?? "2026-08-03T00:00:00.000Z",
       endedAt: input.endedAt ?? null,
@@ -449,6 +450,7 @@ Deno.test("topic and session writes use their stable Codex routes", async () => 
       topicCardId: "topic-1",
       codexThreadId: "thread-1",
       deviceId: fixedPrincipal.deviceId,
+      platform: "macos",
       workspacePath: "/workspace",
     }),
     repo,
@@ -457,6 +459,34 @@ Deno.test("topic and session writes use their stable Codex routes", async () => 
 
   assertEquals(topicResponse.status, 201);
   assertEquals(sessionResponse.status, 201);
+  assertEquals((await responseJson(sessionResponse) as Session).platform, "macos");
+});
+
+Deno.test("session start requires a supported captured platform", async () => {
+  const missing = await route(
+    jsonRequest("POST", "/v1/sessions", {
+      topicCardId: "topic-1",
+      codexThreadId: "thread-1",
+      deviceId: fixedPrincipal.deviceId,
+      workspacePath: "/workspace",
+    }),
+    new FakeRepository(),
+    fixedPrincipal,
+  );
+  const unsupported = await route(
+    jsonRequest("POST", "/v1/sessions", {
+      topicCardId: "topic-1",
+      codexThreadId: "thread-1",
+      deviceId: fixedPrincipal.deviceId,
+      platform: "linux",
+      workspacePath: "/workspace",
+    }),
+    new FakeRepository(),
+    fixedPrincipal,
+  );
+
+  assertEquals(missing.status, 422);
+  assertEquals(unsupported.status, 422);
 });
 
 Deno.test("Priming can create an uncompleted To-do for the selected day", async () => {
@@ -743,6 +773,7 @@ Deno.test("date-time fields require ISO timestamps with an offset", async () => 
       topicCardId: "topic-1",
       codexThreadId: "thread-1",
       deviceId: fixedPrincipal.deviceId,
+      platform: "macos",
       workspacePath: "/workspace",
       startedAt: "August 3, 2026",
     }),
@@ -750,6 +781,7 @@ Deno.test("date-time fields require ISO timestamps with an offset", async () => 
       topicCardId: "topic-1",
       codexThreadId: "thread-1",
       deviceId: fixedPrincipal.deviceId,
+      platform: "macos",
       workspacePath: "/workspace",
       startedAt: null,
     }),

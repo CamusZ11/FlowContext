@@ -382,6 +382,7 @@ async function createSession(
     "topicCardId",
     "codexThreadId",
     "deviceId",
+    "platform",
     "workspacePath",
     "startedAt",
     "endedAt",
@@ -389,6 +390,7 @@ async function createSession(
   requiredString(input, "topicCardId");
   requiredString(input, "codexThreadId");
   requiredString(input, "deviceId");
+  requiredEnum(input, "platform", ["macos", "windows"]);
   requiredString(input, "workspacePath");
   assertDevicePrincipal(input, principal);
   optionalNonNullDateTime(input, "startedAt");

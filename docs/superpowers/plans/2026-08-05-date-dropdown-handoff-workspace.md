@@ -7,7 +7,7 @@
 - Date list is exactly selected date ±3 days, labels `MM / DD 周X`, selected blue outline, outside/Escape/select closes.
 - Browser URL/popstate and desktop in-memory date behavior remain unchanged.
 - Handoff workspace path comes only from the server-validated Session; never accept it from Handoff JSON.
-- Session platform is written only at session start as `macos` or `windows`; Handoff never accepts a platform field.
+- Session platform is written only at session start as `macos` or `windows`; legacy persisted Sessions retain a nullable unknown platform and Handoff never accepts a platform field.
 - Handoff, Topic update and workspace upsert are one owner-scoped transaction; no client-side fallback writes.
 - No change to Topic done semantics, no arbitrary path picker, no sleep/wake files.
 ---
@@ -16,7 +16,7 @@
 **Produces:** `create_handoff_and_update_topic` returns existing/new Handoff while atomically upserting `device_workspaces` from the owned Session.
 - [ ] **Step 1: Write failing tests** for a Session requiring immutable `platform`, platform propagation from `flowcontext-session`, and a successful Handoff creating `(owner_id, session.device_id, topic.project_id)` workspace with `session.platform` and `session.workspace_path`; assert retry idempotency and mismatched owner/session full rollback.
 - [ ] **Step 2: Verify RED** with `supabase test db --local supabase/tests/core_schema.test.sql supabase/tests/rls.test.sql`; expected missing workspace binding assertions.
-- [ ] **Step 3: Create migration using** `supabase migration new session_platform_and_handoff_workspace`; add non-null Session platform with a checked backfill-safe migration, then replace the RPC so it loads the owned session/topic/project, inserts Handoff/update Topic, then:
+- [ ] **Step 3: Create migration using** `supabase migration new session_platform_and_handoff_workspace`; add nullable, checked Session platform for legacy-read compatibility (new Session API writes are non-null), then replace the RPC so it loads the owned session/topic/project, rejects an unknown legacy platform before any write, inserts Handoff/update Topic, then:
 ```sql
 insert into public.device_workspaces (owner_id, device_id, platform, project_id, workspace_path)
 values (v_owner_id, v_session.device_id, v_session.platform, v_project_id, v_session.workspace_path)

@@ -378,6 +378,7 @@ Deno.test("every write payload is owner-scoped and strips caller owner fields", 
       topic_card_id: "topic-1",
       codex_thread_id: "thread-1",
       device_id: fixedPrincipal.deviceId,
+      platform: "macos",
       workspace_path: "/workspace",
       started_at: "2026-08-03T00:00:00.000Z",
       ended_at: null,
@@ -422,13 +423,15 @@ Deno.test("every write payload is owner-scoped and strips caller owner fields", 
   });
   const repo = createSupabaseRepository(client);
 
-  await repo.createSession?.({
+  const createdSession = await repo.createSession?.({
     topicCardId: "topic-1",
     codexThreadId: "thread-1",
     deviceId: fixedPrincipal.deviceId,
+    platform: "macos",
     workspacePath: "/workspace",
     ownerId: "attacker",
   } as unknown as Partial<Session>, fixedPrincipal);
+  assertEquals(createdSession?.platform, "macos");
   await repo.upsertProjectProjection?.("project-1", {
     projectKey: "project-1",
     title: "Project",
@@ -456,4 +459,5 @@ Deno.test("every write payload is owner-scoped and strips caller owner fields", 
     assertEquals(payload.owner_id, fixedPrincipal.ownerId);
     assertEquals(payload.ownerId, undefined);
   }
+  assertEquals((writes[0].values as Record<string, unknown>).platform, "macos");
 });
