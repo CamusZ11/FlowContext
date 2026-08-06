@@ -31,7 +31,10 @@ class FakeRepository {
   }
   async updateTodo() { this.calls.push("updateTodo"); return null; }
   async deleteTodo() { this.calls.push("deleteTodo"); return null; }
-  async rolloverIncompleteTodos() { this.calls.push("rollover"); return []; }
+  async rolloverIncompleteTodos(_principal?: unknown, fromDate?: string, toDate?: string, timezone?: string) {
+    this.calls.push(`rollover:${fromDate}:${toDate}:${timezone}`);
+    return [];
+  }
   async listSuggestedTopics() { this.calls.push("topics"); return []; }
   async getTopicContext() { this.calls.push("context"); return null; }
   async getDailyProjection() { this.calls.push("daily"); return null; }
@@ -91,7 +94,7 @@ describe("FlowContext REST API", () => {
     const requests = [
       { method: "GET", url: "/v1/todos?date=2026-02-30" },
       { method: "GET", url: "/v1/topics?limit=101" },
-      { method: "POST", url: "/v1/todos/rollover", payload: { fromDate: "2026-08-05", toDate: "2026-08-06", timeZone: "Mars/Olympus" } },
+      { method: "POST", url: "/v1/todos/rollover", payload: { fromDate: "2026-08-05", toDate: "2026-08-06", timezone: "Mars/Olympus" } },
       { method: "GET", url: "/v1/topics/not-a-uuid/context" },
       { method: "POST", url: "/v1/sessions", payload: { topicCardId: "not-a-uuid", codexThreadId: "thread", deviceId, workspacePath: "/tmp" } },
     ];
@@ -115,7 +118,7 @@ describe("FlowContext REST API", () => {
       method: "POST",
       url: "/v1/todos/rollover",
       headers: auth(repository),
-      payload: { fromDate: "2026-08-05", toDate: "2026-08-06", timeZone: "Asia/Shanghai" },
+      payload: { fromDate: "2026-08-05", toDate: "2026-08-06", timezone: "Asia/Shanghai" },
     });
 
     expect(list.json()).toEqual([expect.objectContaining({ plannedDate: "2026-08-06", isCompleted: false })]);
@@ -124,7 +127,7 @@ describe("FlowContext REST API", () => {
     expect(context.json()).toBeNull();
     expect(daily.json()).toBeNull();
     expect(rollover.statusCode).toBe(200);
-    expect(repository.calls).toEqual(["listTodos:2026-08-06", "topics", "context", "daily", "rollover"]);
+    expect(repository.calls).toEqual(["listTodos:2026-08-06", "topics", "context", "daily", "rollover:2026-08-05:2026-08-06:Asia/Shanghai"]);
     await app.close();
   });
 
@@ -151,7 +154,56 @@ describe("FlowContext REST API", () => {
       payload: { enrollmentCode: "x", deviceId, platform: "macos" },
     });
 
-    expect(response.statusCode).not.toBe(401);
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      deviceToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      userId: ownerId,
+    });
+    await app.close();
+  });
+
+  it("requires the exact rollover timezone field used by the client", async () => {
+    const { app, repository } = createApp();
+    const headers = auth(repository);
+    const legacy = await app.inject({
+      method: "POST",
+      url: "/v1/todos/rollover",
+      headers,
+      payload: { fromDate: "2026-08-05", toDate: "2026-08-06", timeZone: "Asia/Shanghai" },
+    });
+    const current = await app.inject({
+      method: "POST",
+      url: "/v1/todos/rollover",
+      headers,
+      payload: { fromDate: "2026-08-05", toDate: "2026-08-06", timezone: "Asia/Shanghai" },
+    });
+
+    expect(legacy.statusCode).toBe(422);
+    expect(legacy.json()).toEqual({ error: "invalid_request" });
+    expect(current.statusCode).toBe(200);
+    expect(repository.calls).toEqual(["rollover:2026-08-05:2026-08-06:Asia/Shanghai"]);
+    await app.close();
+  });
+
+  it("requires timezone-bearing calendar-valid ISO datetimes", async () => {
+    const { app, repository } = createApp();
+    const invalidValues = [
+      "2026-08-06T00:00:00",
+      "2026-02-30T00:00:00Z",
+      "2026-08-06T24:00:00+08:00",
+    ];
+
+    for (const lastActiveAt of invalidValues) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/topics",
+        headers: auth(repository),
+        payload: { projectId: unknownTodoId, title: "Topic", lastActiveAt },
+      });
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toEqual({ error: "invalid_request" });
+    }
+    expect(repository.calls).toEqual([]);
     await app.close();
   });
 
@@ -187,6 +239,22 @@ describe("FlowContext REST API", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ error: "device_unauthorized" });
+    await app.close();
+  });
+
+  it("returns a stable 503 when PostgreSQL LISTEN setup fails before headers", async () => {
+    const repository = new FakeRepository();
+    const { app } = createApp(repository, {
+      async subscribe() { throw new Error("listen failed"); },
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/todos/stream?date=2026-08-06",
+      headers: auth(repository),
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: "stream_unavailable" });
     await app.close();
   });
 });

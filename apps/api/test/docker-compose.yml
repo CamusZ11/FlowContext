@@ -1,0 +1,18 @@
+name: flowcontext-task3-test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flowcontext_test
+      POSTGRES_USER: flowcontext_test
+      POSTGRES_PASSWORD: flowcontext_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowcontext_test -d flowcontext_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

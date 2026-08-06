@@ -85,7 +85,9 @@ function dateTime(value: unknown, nullable = false): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null && nullable) return null;
   const text = requiredString(value);
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(text) || Number.isNaN(Date.parse(text))) throw invalidRequest();
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)$/.exec(text);
+  if (!match) throw invalidRequest();
+  isoDate(`${match[1]}-${match[2]}-${match[3]}`);
   return text;
 }
 
@@ -290,7 +292,7 @@ function registerTodoRoutes(app: FastifyInstance, repository: FlowDataRepository
     const body = record(request.body);
     const fromDate = isoDate(body.fromDate);
     const toDate = isoDate(body.toDate);
-    const zone = timeZone(body.timeZone);
+    const zone = timeZone(body.timezone);
     if (toDate !== localDate(now(), zone) || fromDate !== previousDate(toDate)) throw invalidRequest();
     return repository.rolloverIncompleteTodos(principal(request), fromDate, toDate, zone);
   });
@@ -361,7 +363,11 @@ export function registerFlowRoutes(
     const date = isoDate(queryRecord(request).date);
     if (!todoEvents) throw new ApiError(503, "stream_unavailable");
     const authenticated = principal(request);
-    reply.hijack();
-    await openTodoEventStream(reply.raw, todoEvents, authenticated.ownerId, date);
+    try {
+      await openTodoEventStream(reply.raw, todoEvents, authenticated.ownerId, date);
+      reply.hijack();
+    } catch {
+      throw new ApiError(503, "stream_unavailable");
+    }
   });
 }

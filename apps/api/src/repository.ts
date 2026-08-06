@@ -38,7 +38,7 @@ export interface FlowDataRepository {
   createTodo(principal: Principal, input: TodoCreate): Promise<Todo>;
   updateTodo(principal: Principal, id: string, patch: TodoPatch): Promise<Todo | null>;
   deleteTodo(principal: Principal, id: string): Promise<Todo | null>;
-  rolloverIncompleteTodos(principal: Principal, fromDate: string, toDate: string, timeZone: string): Promise<Todo[]>;
+  rolloverIncompleteTodos(principal: Principal, fromDate: string, toDate: string, timezone: string): Promise<Todo[]>;
   listSuggestedTopics(principal: Principal, limit: number): Promise<TopicCard[]>;
   getTopicContext(principal: Principal, topicId: string, deviceId?: string): Promise<TopicContext | null>;
   getDailyProjection(principal: Principal, date: string): Promise<DailyProjection | null>;
@@ -70,11 +70,23 @@ function dateTimeValue(row: Row, field: string): string {
   return Number.isNaN(parsed.valueOf()) ? value : parsed.toISOString();
 }
 
+function calendarDateValue(row: Row, field: string): string {
+  const value = row[field];
+  if (typeof value === "string") return value.slice(0, 10);
+  if (value instanceof Date) {
+    const year = String(value.getFullYear()).padStart(4, "0");
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  throw new ApiError(500, "mapping_error");
+}
+
 function mapTodo(row: Row): Todo {
   return {
     id: stringValue(row, "id"),
     title: stringValue(row, "title"),
-    plannedDate: stringValue(row, "planned_date").slice(0, 10),
+    plannedDate: calendarDateValue(row, "planned_date"),
     plannedTime: nullableString(row, "planned_time")?.slice(0, 5) ?? null,
     isCompleted: row.is_completed === true,
     projectId: nullableString(row, "project_id"),
@@ -154,7 +166,7 @@ function mapWorkspace(row: Row): DeviceWorkspace {
 function mapDaily(row: Row): DailyProjection {
   const projects = Array.isArray(row.projects) ? row.projects : [];
   return {
-    date: stringValue(row, "date").slice(0, 10),
+    date: calendarDateValue(row, "date"),
     dailyLens: stringValue(row, "daily_lens"),
     projects: projects as ProjectProjection[],
     macReport: nullableString(row, "mac_report"),
@@ -283,7 +295,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
     principal: Principal,
     fromDate: string,
     toDate: string,
-    _timeZone: string,
+    _timezone: string,
   ): Promise<Todo[]> {
     const client = await this.flowPool.connect() as PoolClient;
     let todos: Todo[] = [];

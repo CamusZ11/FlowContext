@@ -6,12 +6,19 @@ import { PostgresTodoEventSource, formatTodoEvent, openTodoEventStream } from ".
 
 class RawResponse extends PassThrough {
   readonly headers: Record<string, string> = {};
+  readonly operations: string[] = [];
   statusCode = 0;
 
   writeHead(statusCode: number, headers: Record<string, string>) {
+    this.operations.push("headers");
     this.statusCode = statusCode;
     Object.assign(this.headers, headers);
     return this;
+  }
+
+  override write(chunk: unknown, ...args: unknown[]) {
+    this.operations.push("write");
+    return super.write(chunk, ...args as []);
   }
 }
 
@@ -83,6 +90,24 @@ describe("to-do SSE", () => {
     await opening;
 
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("buffers a notification delivered during subscribe until after response headers", async () => {
+    const raw = new RawResponse();
+    let output = "";
+    raw.on("data", (chunk) => { output += String(chunk); });
+    const source = {
+      async subscribe(_ownerId: string, _date: string, listener: (event: { ownerId: string; date: string; todoId: string; kind: "upsert" }) => void) {
+        listener({ ownerId: "owner-1", date: "2026-08-06", todoId: "todo-race", kind: "upsert" });
+        return () => {};
+      },
+    };
+
+    await openTodoEventStream(raw, source, "owner-1", "2026-08-06");
+
+    expect(raw.operations[0]).toBe("headers");
+    expect(output.indexOf(": connected\n\n")).toBeLessThan(output.indexOf("event: todo.changed\n"));
+    raw.emit("close");
   });
 
   it("formats no owner identifier into the client-visible frame", () => {

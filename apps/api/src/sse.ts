@@ -77,6 +77,8 @@ export async function openTodoEventStream(
   let unsubscribe: (() => void | Promise<void>) | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let closed = false;
+  let headersEstablished = false;
+  const bufferedEvents: TodoEvent[] = [];
   const close = (): void => {
     if (closed) return;
     closed = true;
@@ -87,7 +89,9 @@ export async function openTodoEventStream(
   response.once("error", close);
 
   unsubscribe = await source.subscribe(ownerId, date, (event) => {
-    if (!closed) response.write(formatTodoEvent(event));
+    if (closed) return;
+    if (!headersEstablished) bufferedEvents.push(event);
+    else response.write(formatTodoEvent(event));
   });
   if (closed) {
     await unsubscribe();
@@ -99,6 +103,8 @@ export async function openTodoEventStream(
     connection: "keep-alive",
     "x-accel-buffering": "no",
   });
+  headersEstablished = true;
   response.write(": connected\n\n");
+  for (const event of bufferedEvents) response.write(formatTodoEvent(event));
   heartbeat = setInterval(() => response.write(": ping\n\n"), heartbeatMilliseconds);
 }
