@@ -78,7 +78,8 @@ describe("Tauri platform", () => {
 
   it("keeps sessions in memory when native secure storage is unavailable", async () => {
     window.localStorage.clear();
-    const invoke: TauriInvoke = async () => {
+    const invoke: TauriInvoke = async (command) => {
+      if (command === "device_token_clear_intent_get") return false;
       throw new Error("keychain unavailable");
     };
     const platform = await createTauriPlatform({
@@ -217,6 +218,7 @@ describe("Tauri platform", () => {
 
   it("does not read an old native token when the clear-intent state is unreadable", async () => {
     const nativeTokenReads = vi.fn();
+    const fallbackValues = new Map([["flowcontext.device-token", "stale-process-session"]]);
     const invoke: TauriInvoke = async (command, args) => {
       const key = String(args?.key ?? "");
       if (command === "device_token_clear_intent_get") {
@@ -229,10 +231,19 @@ describe("Tauri platform", () => {
       }
       return null;
     };
-    const restartedLaunch = await createTauriPlatform({ invoke });
+    const fallbackStorage = {
+      get: (key: string) => fallbackValues.get(key) ?? null,
+      set: (key: string, value: string) => { fallbackValues.set(key, value); },
+      remove: (key: string) => { fallbackValues.delete(key); },
+      getItem: (key: string) => fallbackValues.get(key) ?? null,
+      setItem: (key: string, value: string) => { fallbackValues.set(key, value); },
+      removeItem: (key: string) => { fallbackValues.delete(key); },
+    };
+    const restartedLaunch = await createTauriPlatform({ invoke, fallbackStorage });
 
     expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBeNull();
     expect(nativeTokenReads).not.toHaveBeenCalled();
+    expect(fallbackValues.has("flowcontext.device-token")).toBe(false);
   });
 
   it("also deletes the process-memory copy after native credential deletion succeeds", async () => {

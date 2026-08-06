@@ -92,10 +92,10 @@ export function createTauriSessionStorage(
       try {
         clearPending = await invoke(DEVICE_TOKEN_CLEAR_INTENT_GET) === true;
       } catch {
-        // If the independent intent store cannot be read, fail closed rather
-        // than risk returning a native credential that was previously cleared.
-        // A process-memory value cannot survive a restart, so it remains safe.
-        return await fallbackStorage.get(key);
+        // The intent state is authoritative. If it cannot be read, neither a
+        // native credential nor a possibly stale process fallback is trusted.
+        await fallbackStorage.remove(key);
+        return null;
       }
       if (clearPending) {
         const fallbackValue = await fallbackStorage.get(key);
