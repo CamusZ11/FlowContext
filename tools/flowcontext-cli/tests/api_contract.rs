@@ -1,9 +1,49 @@
-use flowcontext_cli::client::{FlowContextClient, HandoffCreate, HandoffTopicUpdate, TodoCreate};
+use flowcontext_cli::client::{
+    FlowContextClient, HandoffCreate, HandoffTopicUpdate, SessionStart, TodoCreate,
+};
 use reqwest::Client as HttpClient;
 use secrecy::SecretString;
 use serde_json::json;
 use wiremock::matchers::{body_json, header_exists, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+#[tokio::test]
+async fn session_start_preserves_the_device_platform() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .and(body_json(json!({
+            "topicCardId": "t1",
+            "codexThreadId": "thread-1",
+            "deviceId": "device-1",
+            "platform": "windows",
+            "workspacePath": "F:/FlowContext",
+            "startedAt": "2026-08-06T00:00:00Z"
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "s1" })))
+        .mount(&server)
+        .await;
+    let client = FlowContextClient::with_http(
+        server.uri(),
+        SecretString::from("device-token".to_string()),
+        HttpClient::new(),
+    )
+    .unwrap();
+
+    let result = client
+        .start_session(&SessionStart {
+            topic_card_id: "t1".into(),
+            codex_thread_id: "thread-1".into(),
+            device_id: "device-1".into(),
+            platform: "windows".into(),
+            workspace_path: "F:/FlowContext".into(),
+            started_at: Some("2026-08-06T00:00:00Z".into()),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.id, "s1");
+}
 
 #[tokio::test]
 async fn handoff_sends_idempotency_key_without_logging_content() {

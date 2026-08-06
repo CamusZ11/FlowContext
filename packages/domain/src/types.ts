@@ -2,6 +2,8 @@ export type TopicState = "open" | "done";
 
 export type ProjectLifecycleStatus = "inbox" | "active" | "paused" | "done" | "archived";
 
+export type DevicePlatform = "macos" | "windows";
+
 export interface ProjectProjection {
   id?: string | null;
   projectKey: string;
@@ -33,6 +35,7 @@ export interface Session {
   topicCardId: string;
   codexThreadId: string;
   deviceId: string;
+  platform: DevicePlatform;
   workspacePath: string;
   startedAt: string;
   endedAt?: string | null;
@@ -78,8 +81,6 @@ export interface DailyProjection {
   macReport?: string | null;
   windowsReport?: string | null;
 }
-
-export type DevicePlatform = "macos" | "windows";
 
 export interface DeviceWorkspace {
   deviceId: string;

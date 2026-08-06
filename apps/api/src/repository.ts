@@ -1,5 +1,6 @@
 import type {
   DailyProjection,
+  DevicePlatform,
   DeviceWorkspace,
   Handoff,
   HandoffCreate,
@@ -64,6 +65,12 @@ function nullableString(row: Row, field: string): string | null {
   return row[field] === null || row[field] === undefined ? null : stringValue(row, field);
 }
 
+function platformValue(row: Row, field = "platform"): DevicePlatform {
+  const value = row[field];
+  if (value !== "macos" && value !== "windows") throw new ApiError(500, "mapping_error");
+  return value;
+}
+
 function dateTimeValue(row: Row, field: string): string {
   const value = stringValue(row, field);
   const parsed = new Date(value);
@@ -118,6 +125,7 @@ function mapSession(row: Row): Session {
     topicCardId: stringValue(row, "topic_card_id"),
     codexThreadId: stringValue(row, "codex_thread_id"),
     deviceId: stringValue(row, "device_id"),
+    platform: platformValue(row),
     workspacePath: stringValue(row, "workspace_path"),
     startedAt: dateTimeValue(row, "started_at"),
     endedAt: row.ended_at === null || row.ended_at === undefined ? null : dateTimeValue(row, "ended_at"),
@@ -154,10 +162,9 @@ function mapProject(row: Row): ProjectProjection {
 }
 
 function mapWorkspace(row: Row): DeviceWorkspace {
-  if (row.platform !== "macos" && row.platform !== "windows") throw new ApiError(500, "mapping_error");
   return {
     deviceId: stringValue(row, "device_id"),
-    platform: row.platform,
+    platform: platformValue(row),
     projectId: stringValue(row, "project_id"),
     workspacePath: stringValue(row, "workspace_path"),
   };
@@ -347,7 +354,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
     if (!topicRow) return null;
     const sessionRow = await queryOne(
       this.flowPool,
-      `select id, topic_card_id, codex_thread_id, device_id, workspace_path, started_at, ended_at
+      `select id, topic_card_id, codex_thread_id, device_id, platform, workspace_path, started_at, ended_at
        from sessions where owner_id = $1 and topic_card_id = $2
        order by started_at desc, id desc limit 1`,
       [principal.ownerId, topicId],
@@ -405,10 +412,10 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
     try {
       const row = await queryOne(
         this.flowPool,
-        `insert into sessions (owner_id, topic_card_id, codex_thread_id, device_id, workspace_path, started_at, ended_at)
-         values ($1, $2, $3, $4, $5, coalesce($6::timestamptz, now()), $7)
-         returning id, topic_card_id, codex_thread_id, device_id, workspace_path, started_at, ended_at`,
-        [principal.ownerId, input.topicCardId, input.codexThreadId, principal.deviceId, input.workspacePath, input.startedAt ?? null, input.endedAt ?? null],
+        `insert into sessions (owner_id, topic_card_id, codex_thread_id, device_id, platform, workspace_path, started_at, ended_at)
+         values ($1, $2, $3, $4, $5, $6, coalesce($7::timestamptz, now()), $8)
+         returning id, topic_card_id, codex_thread_id, device_id, platform, workspace_path, started_at, ended_at`,
+        [principal.ownerId, input.topicCardId, input.codexThreadId, principal.deviceId, input.platform, input.workspacePath, input.startedAt ?? null, input.endedAt ?? null],
       );
       return row ? mapSession(row) : null;
     } catch (error) {
@@ -432,9 +439,11 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
       }
       const session = await queryOne(
         client,
-        `select id from sessions
-         where owner_id = $1 and id = $2 and topic_card_id = $3
-         for update`,
+        `select s.id, s.device_id, s.platform, s.workspace_path, t.project_id
+         from sessions s
+         join topic_cards t on t.owner_id = s.owner_id and t.id = s.topic_card_id
+         where s.owner_id = $1 and s.id = $2 and s.topic_card_id = $3
+         for update of s, t`,
         [principal.ownerId, input.sessionId, input.topicCardId],
       );
       if (!session) {
@@ -460,6 +469,15 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
              updated_at = now()
          where owner_id = $1 and id = $2`,
         [principal.ownerId, input.topicCardId, update.currentState ?? null, update.nextAction ?? null, update.openQuestions === undefined ? null : JSON.stringify(update.openQuestions), stringValue(inserted, "id")],
+      );
+      await client.query(
+        `insert into device_workspaces (owner_id, device_id, platform, project_id, workspace_path)
+         values ($1, $2, $3, $4, $5)
+         on conflict (owner_id, device_id, project_id) do update
+         set platform = excluded.platform,
+             workspace_path = excluded.workspace_path,
+             updated_at = now()`,
+        [principal.ownerId, stringValue(session, "device_id"), platformValue(session), stringValue(session, "project_id"), stringValue(session, "workspace_path")],
       );
       await client.query("commit");
       return { record: mapHandoff(inserted), created: true };

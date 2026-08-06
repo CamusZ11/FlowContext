@@ -14,6 +14,7 @@ class FakeRepository {
   readonly token = randomBytes(32).toString("base64url");
   readonly calls: string[] = [];
   conflict = false;
+  lastSessionInput: Record<string, unknown> | null = null;
 
   async findEnrollment() { return null; }
   async enrollDevice() { return true; }
@@ -44,8 +45,9 @@ class FakeRepository {
   }
   async createSession(_principal?: unknown, input: Record<string, unknown> = {}) {
     this.calls.push("createSession");
+    this.lastSessionInput = input;
     if (this.conflict) throw new ApiError(409, "conflict");
-    return { id: "30000000-0000-4000-8000-000000000001", topicCardId: input.topicCardId, codexThreadId: input.codexThreadId, deviceId, workspacePath: input.workspacePath, startedAt: "2026-08-06T00:00:00.000Z", endedAt: null };
+    return { id: "30000000-0000-4000-8000-000000000001", topicCardId: input.topicCardId, codexThreadId: input.codexThreadId, deviceId, platform: input.platform, workspacePath: input.workspacePath, startedAt: "2026-08-06T00:00:00.000Z", endedAt: null };
   }
   async createHandoff(_principal?: unknown, input: Record<string, unknown> = {}) {
     this.calls.push("createHandoff");
@@ -74,6 +76,27 @@ function auth(repository: FakeRepository) {
 }
 
 describe("FlowContext REST API", () => {
+  it("preserves the Session platform through the production route", async () => {
+    const { app, repository } = createApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sessions",
+      headers: auth(repository),
+      payload: {
+        topicCardId: unknownTodoId,
+        codexThreadId: "thread-platform",
+        deviceId,
+        platform: "windows",
+        workspacePath: "F:/FlowContext",
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ platform: "windows", workspacePath: "F:/FlowContext" });
+    expect(repository.lastSessionInput).toMatchObject({ platform: "windows" });
+    await app.close();
+  });
+
   it("returns 404 rather than 422 when PATCH targets an unknown owner-scoped todo", async () => {
     const { app, repository } = createApp();
     const response = await app.inject({
@@ -138,7 +161,7 @@ describe("FlowContext REST API", () => {
       method: "POST",
       url: "/v1/sessions",
       headers: auth(repository),
-      payload: { topicCardId: unknownTodoId, codexThreadId: "thread", deviceId, workspacePath: "/tmp" },
+      payload: { topicCardId: unknownTodoId, codexThreadId: "thread", deviceId, platform: "macos", workspacePath: "/tmp" },
     });
 
     expect(response.statusCode).toBe(409);
@@ -213,7 +236,7 @@ describe("FlowContext REST API", () => {
     const sessionId = "30000000-0000-4000-8000-000000000001";
     const requests = [
       { method: "POST", url: "/v1/topics", payload: { projectId: unknownTodoId, title: "Topic" }, status: 201 },
-      { method: "POST", url: "/v1/sessions", payload: { topicCardId: unknownTodoId, codexThreadId: "thread", deviceId, workspacePath: "/tmp" }, status: 201 },
+      { method: "POST", url: "/v1/sessions", payload: { topicCardId: unknownTodoId, codexThreadId: "thread", deviceId, platform: "macos", workspacePath: "/tmp" }, status: 201 },
       { method: "POST", url: "/v1/handoffs", payload: { sessionId, topicCardId: unknownTodoId, content: "handoff", idempotencyKey: "key" }, status: 201 },
       { method: "POST", url: `/v1/topics/${unknownTodoId}/complete`, payload: { explicit: true }, status: 200 },
       { method: "PUT", url: `/v1/project-projections/${unknownTodoId}`, payload: { projectKey: "project", title: "Project", lifecycleStatus: "active", summary: "", nextAction: "" }, status: 200 },

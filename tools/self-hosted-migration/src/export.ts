@@ -79,6 +79,7 @@ export async function exportBusinessData(outputDirectory: string, source: Migrat
 
 function selectSamples(rows: Record<BusinessTable, MigrationRow[]>): MigrationManifest["samples"] {
   return {
+    sessionIds: spreadSample(rows.sessions).map((row) => requiredString(row.id, "session_id")),
     todoIds: spreadSample(rows.todos).map((row) => requiredString(row.id, "todo_id")),
     dailyProjections: spreadSample(rows.daily_projections).map((row) => ({
       ownerId: requiredString(row.owner_id, "owner_id"),

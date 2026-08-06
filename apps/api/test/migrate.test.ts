@@ -1,6 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -67,6 +67,17 @@ function asPool(pool: RecordingPool): Pool {
 }
 
 describe("runMigrations", () => {
+  it("applies a forward migration that makes Session platform durable", async () => {
+    const pool = new RecordingPool();
+    const directory = resolve(import.meta.dirname, "../migrations");
+
+    const applied = await runMigrations(asPool(pool), directory);
+
+    expect(applied).toContain("003_session_platform.sql");
+    const platformMigration = pool.statements.find(({ sql }) => sql.includes("alter table sessions") && sql.includes("platform"));
+    expect(platformMigration?.sql).toMatch(/platform[\s\S]+(?:macos|windows)/);
+  });
+
   it("applies new migrations in filename order under one transaction advisory lock", async () => {
     const pool = new RecordingPool();
     const directory = await migrationDirectory({

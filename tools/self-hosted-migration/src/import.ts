@@ -13,7 +13,7 @@ export interface ImportOptions {
 const TABLE_COLUMNS: Record<BusinessTable, readonly string[]> = {
   project_projections: ["id", "owner_id", "project_key", "title", "lifecycle_status", "summary", "next_action", "source_path", "last_synced_at", "created_at", "updated_at"],
   topic_cards: ["id", "owner_id", "project_id", "title", "state", "current_state", "next_action", "open_questions", "latest_handoff_id", "last_active_at", "focus_rank", "resurface_at", "resurface_condition", "created_at", "updated_at"],
-  sessions: ["id", "owner_id", "topic_card_id", "codex_thread_id", "device_id", "workspace_path", "started_at", "ended_at", "created_at"],
+  sessions: ["id", "owner_id", "topic_card_id", "codex_thread_id", "device_id", "platform", "workspace_path", "started_at", "ended_at", "created_at"],
   handoffs: ["id", "owner_id", "session_id", "topic_card_id", "content", "idempotency_key", "created_at", "generated_at"],
   todos: ["id", "owner_id", "title", "planned_date", "planned_time", "is_completed", "project_id", "topic_card_id", "created_at", "updated_at"],
   daily_projections: ["owner_id", "date", "daily_lens", "projects", "mac_report", "windows_report", "updated_at"],

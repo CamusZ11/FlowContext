@@ -192,7 +192,16 @@ describe("HttpFlowRepository", () => {
     };
     const context = {
       topic,
-      latestSession: null,
+      latestSession: {
+        id: "session-1",
+        topicCardId: "topic-1",
+        codexThreadId: "thread-1",
+        deviceId: "device-1",
+        platform: "windows",
+        workspacePath: "F:/FlowContext",
+        startedAt: "2026-08-03T07:00:00.000Z",
+        endedAt: null,
+      },
       latestHandoff: null,
       currentWorkspace: null,
     };
@@ -224,7 +233,7 @@ describe("HttpFlowRepository", () => {
     await repo.updateTodo("todo-1", { title: "更新", plannedTime: null, projectId: undefined });
     await repo.deleteTodo("todo-1");
     await repo.listSuggestedTopics(12);
-    await repo.getTopicContext("topic-1");
+    const mappedContext = await repo.getTopicContext("topic-1");
     await repo.getDailyProjection("2026-08-03");
 
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe("https://flowcontext.example.com/v1/todos");
@@ -242,6 +251,7 @@ describe("HttpFlowRepository", () => {
     expect(String(fetchImpl.mock.calls[3]?.[0])).toBe("https://flowcontext.example.com/v1/topics?limit=12");
     expect(String(fetchImpl.mock.calls[4]?.[0])).toBe("https://flowcontext.example.com/v1/topics/topic-1/context");
     expect(String(fetchImpl.mock.calls[5]?.[0])).toBe("https://flowcontext.example.com/v1/daily-projections/2026-08-03");
+    expect(mappedContext?.latestSession).toMatchObject({ platform: "windows", workspacePath: "F:/FlowContext" });
   });
 
   it("omits missing deviceId and URL-encodes a supplied deviceId", async () => {

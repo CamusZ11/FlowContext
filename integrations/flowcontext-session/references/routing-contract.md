@@ -1,7 +1,7 @@
 # Session Routing Contract
 ## 输入
 - 当前 cwd 与已确认的 Project 工作区映射
-- Codex 技术 thread ID、设备 ID、开始时间
+- Codex 技术 thread ID、设备 ID、设备平台（`macos` 或 `windows`）、开始时间
 - 用户首条请求
 ## 输出
 - 唯一 Project

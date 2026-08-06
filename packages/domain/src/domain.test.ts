@@ -3,6 +3,7 @@ import {
   assertExplicitTopicCompletion,
   handoffUpdateSchema,
   isoDateSchema,
+  sessionSchema,
   sortTodosForDate,
   timeSchema,
   topicCardSchema,
@@ -86,6 +87,21 @@ describe("FlowContext invariants", () => {
         lastActiveAt: "2026-08-02T08:00:00.000Z",
       }).success,
     ).toBe(true);
+  });
+
+  it("requires a Session to preserve its device platform", () => {
+    const session = {
+      id: "session-1",
+      topicCardId: "topic-1",
+      codexThreadId: "thread-1",
+      deviceId: "device-1",
+      workspacePath: "/workspace/FlowContext",
+      startedAt: "2026-08-06T00:00:00.000Z",
+    };
+
+    expect(sessionSchema.safeParse({ ...session, platform: "windows" }).success).toBe(true);
+    expect(sessionSchema.safeParse(session).success).toBe(false);
+    expect(sessionSchema.safeParse({ ...session, platform: "linux" }).success).toBe(false);
   });
 
   it("rejects topic state and project lifecycle fields from handoff updates", () => {

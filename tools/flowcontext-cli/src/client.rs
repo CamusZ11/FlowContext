@@ -55,6 +55,7 @@ pub struct SessionStart {
     pub topic_card_id: String,
     pub codex_thread_id: String,
     pub device_id: String,
+    pub platform: String,
     pub workspace_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,

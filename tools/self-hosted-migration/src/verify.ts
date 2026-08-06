@@ -31,6 +31,7 @@ export interface MigrationManifest {
     sha256: string;
   }>;
   samples: {
+    sessionIds: string[];
     todoIds: string[];
     dailyProjections: Array<{ ownerId: string; date: string }>;
   };
@@ -65,6 +66,12 @@ export async function verifyImport(inputDirectory: string, target: Queryable): P
     seenTopics.add(topicId);
   }
   if (seenTopics.size !== rows.topic_cards.length) throw new Error("latest_handoff_mismatch");
+
+  const expectedSessions = selectedRows(rows.sessions, "id", manifest.samples.sessionIds);
+  const actualSessions = await target.query(SESSION_SAMPLE_SQL, [manifest.samples.sessionIds]);
+  if (!rowSetsEqual(expectedSessions, actualSessions.rows, (row) => requiredString(row.id, "id"))) {
+    throw new Error("session_sample_mismatch");
+  }
 
   const expectedTodos = selectedRows(rows.todos, "id", manifest.samples.todoIds);
   const actualTodos = await target.query(TODO_SAMPLE_SQL, [manifest.samples.todoIds]);
@@ -115,6 +122,9 @@ function parseManifest(value: unknown): MigrationManifest {
     parsedTables[table] = { file: entry.file, rowCount: Number(entry.rowCount), sha256: entry.sha256 };
   }
   const samples = asRecord(manifest.samples, "invalid_manifest_samples");
+  if (!Array.isArray(samples.sessionIds) || !samples.sessionIds.every((id) => typeof id === "string")) {
+    throw new Error("invalid_manifest_session_samples");
+  }
   if (!Array.isArray(samples.todoIds) || !samples.todoIds.every((id) => typeof id === "string")) {
     throw new Error("invalid_manifest_todo_samples");
   }
@@ -129,7 +139,7 @@ function parseManifest(value: unknown): MigrationManifest {
   return {
     schemaVersion: 1,
     tables: parsedTables,
-    samples: { todoIds: [...samples.todoIds], dailyProjections },
+    samples: { sessionIds: [...samples.sessionIds], todoIds: [...samples.todoIds], dailyProjections },
   };
 }
 
@@ -252,6 +262,10 @@ order by t.id`;
 const TODO_SAMPLE_SQL = `
 /* flowcontext-verify:todo-samples */
 select * from todos where id = any($1::uuid[]) order by id`;
+
+const SESSION_SAMPLE_SQL = `
+/* flowcontext-verify:session-samples */
+select * from sessions where id = any($1::uuid[]) order by id`;
 
 const DAILY_SAMPLE_SQL = `
 /* flowcontext-verify:daily-samples */

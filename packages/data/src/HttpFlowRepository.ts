@@ -135,11 +135,13 @@ function mapTopicCard(value: unknown): TopicCard {
 
 function mapSession(value: unknown): Session {
   const row = record(value);
+  if (row.platform !== "macos" && row.platform !== "windows") return invalid("invalid_response");
   return {
     id: stringField(row.id, "id"),
     topicCardId: stringField(row.topicCardId, "topicCardId"),
     codexThreadId: stringField(row.codexThreadId, "codexThreadId"),
     deviceId: stringField(row.deviceId, "deviceId"),
+    platform: row.platform,
     workspacePath: stringField(row.workspacePath, "workspacePath"),
     startedAt: stringField(row.startedAt, "startedAt"),
     endedAt: nullableString(row.endedAt, true),

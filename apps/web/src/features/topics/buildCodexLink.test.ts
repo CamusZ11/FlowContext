@@ -46,6 +46,7 @@ describe("Codex deep links", () => {
         topicCardId: base.id,
         codexThreadId: "thread-old",
         deviceId: "windows-1",
+        platform: "windows",
         workspacePath: "F:/项目/Alpha",
         startedAt: "2026-08-02T08:00:00.000Z",
       },

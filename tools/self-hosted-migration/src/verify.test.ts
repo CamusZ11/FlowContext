@@ -59,6 +59,7 @@ const sourceRows = {
     topic_card_id: topicId,
     codex_thread_id: "thread-task-6",
     device_id: "test-device",
+    platform: "macos",
     workspace_path: "/workspace/FlowContext",
     started_at: "2026-08-06T00:00:00.000Z",
     ended_at: null,
@@ -159,6 +160,10 @@ class FixtureTargetPool {
       const ids = values[0] as readonly string[];
       return { rows: this.rows.todos.filter((row) => ids.includes(String(row.id))) };
     }
+    if (sql.includes("/* flowcontext-verify:session-samples */")) {
+      const ids = values[0] as readonly string[];
+      return { rows: this.rows.sessions.filter((row) => ids.includes(String(row.id))) };
+    }
     if (sql.includes("/* flowcontext-verify:daily-samples */")) {
       const keys = values[0] as readonly string[];
       return {
@@ -251,6 +256,13 @@ describe("verifyImport", () => {
       rows.todos[0]!.title = "Wrong title";
     });
     await expect(verifyImport(fixtureDirectory, pool)).rejects.toThrow("todo_sample_mismatch");
+  });
+
+  it("rejects a Session whose imported platform differs from the export", async () => {
+    const pool = targetWith((rows) => {
+      rows.sessions[0]!.platform = "windows";
+    });
+    await expect(verifyImport(fixtureDirectory, pool)).rejects.toThrow("session_sample_mismatch");
   });
 
   it("rejects a changed Daily Projection sample", async () => {
@@ -435,6 +447,7 @@ async function writeFixture(directory: string, rows: Record<TableName, Row[]>): 
     schemaVersion: 1,
     tables,
     samples: {
+      sessionIds: [sessionId],
       todoIds: [selectedTodoId],
       dailyProjections: [{ ownerId, date: "2026-08-06" }],
     },

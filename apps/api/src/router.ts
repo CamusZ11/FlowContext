@@ -59,6 +59,12 @@ function todoResourceId(value: unknown): string {
   }
 }
 
+function devicePlatform(value: unknown): DevicePlatform {
+  const platform = requiredString(value) as DevicePlatform;
+  if (platform !== "macos" && platform !== "windows") throw invalidRequest();
+  return platform;
+}
+
 function isoDate(value: unknown): string {
   const text = requiredString(value);
   const match = DATE.exec(text);
@@ -221,6 +227,7 @@ function parseSession(value: unknown, authenticated: Principal): Record<string, 
     topicCardId: uuid(body.topicCardId),
     codexThreadId: requiredString(body.codexThreadId),
     deviceId: bodyDeviceId,
+    platform: devicePlatform(body.platform),
     workspacePath: requiredString(body.workspacePath),
     startedAt: dateTime(body.startedAt),
     endedAt: dateTime(body.endedAt, true),
@@ -341,8 +348,7 @@ function registerContinuityWrites(app: FastifyInstance, repository: FlowDataRepo
     const body = record(request.body);
     const deviceId = uuid(params.deviceId);
     if (deviceId !== authenticated.deviceId) throw new ApiError(403, "device_forbidden");
-    const platform = requiredString(body.platform) as DevicePlatform;
-    if (platform !== "macos" && platform !== "windows") throw invalidRequest();
+    const platform = devicePlatform(body.platform);
     return found(await repository.upsertDeviceWorkspace(authenticated, deviceId, uuid(params.projectId), {
       platform,
       workspacePath: requiredString(body.workspacePath),

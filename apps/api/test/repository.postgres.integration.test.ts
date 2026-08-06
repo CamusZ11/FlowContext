@@ -115,6 +115,7 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
       topicCardId: topic!.id,
       codexThreadId: "thread-real-postgres",
       deviceId: owner.deviceId,
+      platform: "macos",
       workspacePath: "/tmp/flowcontext-test",
     });
     expect(session).not.toBeNull();
