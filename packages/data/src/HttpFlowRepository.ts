@@ -22,6 +22,7 @@ import {
 export interface HttpFlowRepositoryOptions {
   baseUrl: string;
   getAccessToken: AccessTokenGetter;
+  getTimezone: () => string;
   fetchImpl?: FetchImplementation;
 }
 
@@ -65,6 +66,15 @@ function assertIsoDate(date: string): void {
     candidate.getUTCDate() !== day
   ) {
     throw new HttpError("invalid_date", 0);
+  }
+}
+
+function assertIanaTimeZone(timezone: string): void {
+  if (!timezone.trim()) throw new HttpError("invalid_timezone", 0);
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
+  } catch {
+    throw new HttpError("invalid_timezone", 0);
   }
 }
 
@@ -367,11 +377,13 @@ function startTodoSubscription(
 }
 
 export class HttpFlowRepository implements FlowRepository {
-  readonly capabilities = { todoRollover: false } as const;
+  readonly capabilities = { todoRollover: true } as const;
   private readonly transport: HttpTransport;
+  private readonly getTimezone: () => string;
 
   constructor(options: HttpFlowRepositoryOptions) {
     this.transport = createHttpTransport(options);
+    this.getTimezone = options.getTimezone;
   }
 
   async listTodos(date: string): Promise<Todo[]> {
@@ -414,8 +426,16 @@ export class HttpFlowRepository implements FlowRepository {
     await this.transport.request<unknown>(`/v1/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
-  async rolloverIncompleteTodos(_fromDate: string, _toDate: string): Promise<Todo[]> {
-    throw new Error("rolloverIncompleteTodos is not supported by the self-hosted provider");
+  async rolloverIncompleteTodos(fromDate: string, toDate: string): Promise<Todo[]> {
+    assertIsoDate(fromDate);
+    assertIsoDate(toDate);
+    const timezone = this.getTimezone();
+    assertIanaTimeZone(timezone);
+    const payload = await this.transport.request<unknown>("/v1/todos/rollover", {
+      method: "POST",
+      body: { fromDate, toDate, timezone },
+    });
+    return array(payload).map(mapTodo);
   }
 
   subscribeTodos(date: string, listener: TodoListener): () => void {

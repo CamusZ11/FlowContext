@@ -78,6 +78,8 @@ const todo: Todo = {
   topicCardId: null,
 };
 
+const getTimezone = () => "Asia/Shanghai";
+
 describe("HttpFlowRepository", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -90,6 +92,7 @@ describe("HttpFlowRepository", () => {
     const repo = new HttpFlowRepository({
       baseUrl: "https://flowcontext.example.com/",
       getAccessToken: async () => "session-token",
+      getTimezone,
       fetchImpl,
     });
 
@@ -109,21 +112,67 @@ describe("HttpFlowRepository", () => {
     }));
   });
 
-  it("rejects rollover because the self-hosted provider has no atomic rollover endpoint", async () => {
+  it("posts the two dates and timezone to the atomic rollover endpoint", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([{
+      ...todo,
+      plannedDate: "2026-08-05",
+    }]));
+    const repo = new HttpFlowRepository({
+      baseUrl: "https://flowcontext.example.com",
+      getAccessToken: () => "session-token",
+      getTimezone: () => "Asia/Shanghai",
+      fetchImpl,
+    });
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).resolves.toEqual([{
+      ...todo,
+      plannedDate: "2026-08-05",
+    }]);
+
+    expect(repo.capabilities).toEqual({ todoRollover: true });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe("https://flowcontext.example.com/v1/todos/rollover");
+    expect(fetchImpl.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
+      fromDate: "2026-08-04",
+      toDate: "2026-08-05",
+      timezone: "Asia/Shanghai",
+    });
+  });
+
+  it("rejects an invalid device timezone before posting the rollover", async () => {
     const fetchImpl = vi.fn();
     const repo = new HttpFlowRepository({
       baseUrl: "https://flowcontext.example.com",
       getAccessToken: () => "session-token",
+      getTimezone: () => "Mars/Olympus_Mons",
       fetchImpl,
     });
 
-    expect(repo.capabilities).toEqual({ todoRollover: false });
-
-    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).rejects.toThrow(
-      "rolloverIncompleteTodos is not supported by the self-hosted provider",
-    );
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05"))
+      .rejects.toMatchObject({ code: "invalid_timezone", status: 0 });
 
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("maps rollover HTTP errors without leaking their response body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: "rollover_denied",
+      detail: "do-not-leak",
+    }), { status: 403 }));
+    const repo = new HttpFlowRepository({
+      baseUrl: "https://flowcontext.example.com",
+      getAccessToken: () => "opaque",
+      getTimezone: () => "Asia/Shanghai",
+      fetchImpl,
+    });
+
+    await expect(repo.rolloverIncompleteTodos("2026-08-04", "2026-08-05")).rejects.toSatisfy((error: unknown) => {
+      expect(error).toBeInstanceOf(HttpError);
+      expect(error).toMatchObject({ code: "rollover_denied", status: 403 });
+      expect(String(error)).not.toContain("do-not-leak");
+      expect(String(error)).not.toContain("opaque");
+      return true;
+    });
   });
 
   it("maps every FlowRepository route and omits undefined patch fields", async () => {
@@ -161,7 +210,7 @@ describe("HttpFlowRepository", () => {
       .mockResolvedValueOnce(jsonResponse([topic]))
       .mockResolvedValueOnce(jsonResponse(context))
       .mockResolvedValueOnce(jsonResponse(projection));
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
 
     const createInput: TodoCreate = {
       title: todo.title,
@@ -197,7 +246,7 @@ describe("HttpFlowRepository", () => {
 
   it("omits missing deviceId and URL-encodes a supplied deviceId", async () => {
     const fetchImpl = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(null)));
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
 
     await repo.getTopicContext("topic/1");
     await repo.getTopicContext("topic/1", "mac/device 一&二");
@@ -210,7 +259,7 @@ describe("HttpFlowRepository", () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse([{ ...todo, plannedDate: "2026-02-30" }]))
       .mockResolvedValueOnce(jsonResponse([{ ...todo, plannedTime: "09:30:00" }]));
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => null, fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => null, getTimezone, fetchImpl });
 
     await expect(repo.listTodos("2026-08-03")).rejects.toMatchObject({ code: "invalid_date" });
     await expect(repo.listTodos("2026-08-03")).rejects.toMatchObject({ code: "invalid_plannedTime" });
@@ -218,7 +267,7 @@ describe("HttpFlowRepository", () => {
 
   it("maps non-2xx error codes without leaking response bodies", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "invalid_credentials", secret: "do-not-leak" }), { status: 401 }));
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "opaque", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "opaque", getTimezone, fetchImpl });
 
     await expect(repo.listTodos("2026-08-03")).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(HttpError);
@@ -237,7 +286,7 @@ describe("HttpFlowRepository", () => {
       .mockResolvedValueOnce(controlled.response)
       .mockResolvedValue(jsonResponse([todo]));
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     expect(listener).toHaveBeenCalledTimes(1);
@@ -264,7 +313,7 @@ describe("HttpFlowRepository", () => {
       .mockReturnValueOnce(firstRefresh.promise)
       .mockReturnValueOnce(secondRefresh.promise);
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     firstStream.push("event: todo.changed\ndata: {\"date\":\"2026-08-03\",\"todoId\":\"todo-1\",\"kind\":\"upsert\"}\n\n");
@@ -300,7 +349,7 @@ describe("HttpFlowRepository", () => {
       .mockResolvedValueOnce(jsonResponse([{ ...todo, title: "retry-4" }]))
       .mockResolvedValueOnce(fifth.response);
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     first.close();
@@ -339,7 +388,7 @@ describe("HttpFlowRepository", () => {
       .mockResolvedValueOnce(jsonResponse([todo]))
       .mockResolvedValueOnce(stream.response);
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.advanceTimersByTimeAsync(1000);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
@@ -361,7 +410,7 @@ describe("HttpFlowRepository", () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: "expired" }), { status: 401 }));
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "expired", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "expired", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
     await vi.advanceTimersByTimeAsync(60_000);
@@ -376,7 +425,7 @@ describe("HttpFlowRepository", () => {
       .mockResolvedValueOnce(jsonResponse([todo]))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: "expired" }), { status: 401 }));
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "expired", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "expired", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     await vi.advanceTimersByTimeAsync(60_000);
@@ -397,7 +446,7 @@ describe("HttpFlowRepository", () => {
       .mockResolvedValueOnce(jsonResponse([{ ...todo, title: "new" }]))
       .mockResolvedValueOnce(secondStream.response);
     const listener = vi.fn();
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", listener);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
@@ -418,7 +467,7 @@ describe("HttpFlowRepository", () => {
     const abort = vi.spyOn(AbortController.prototype, "abort");
     const pending = deferred<Response>();
     const fetchImpl = vi.fn().mockReturnValue(pending.promise);
-    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", fetchImpl });
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
     const cleanup = repo.subscribeTodos("2026-08-03", () => undefined);
     cleanup();
     cleanup();

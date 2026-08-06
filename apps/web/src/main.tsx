@@ -155,6 +155,7 @@ async function bootstrap() {
           repository={new HttpFlowRepository({
             baseUrl: apiUrl,
             getAccessToken: () => storage.get("auth-token"),
+            getTimezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
           })}
           platform={platform}
           auth={createHttpAuth({ baseUrl: apiUrl, storage })}
