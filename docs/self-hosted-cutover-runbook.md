@@ -19,6 +19,8 @@
 - [ ] 对已批准的 `flowcontext.zkabi.cn` 新增一个隔离 Nginx 站点：Nginx TLS 终止后，仅反向代理到 FlowContext 的 loopback/私有 Docker 网络服务；不得让 PostgreSQL 或 API 暴露公网端口。
 - [ ] **Task7.5 必须先修复部署资产**：当前 Caddy Docker Compose 方案会发布 80/443，与批准的 Nginx 共存模式冲突。修复为 Nginx→loopback/私有容器方案并通过部署契约测试前，禁止执行部署脚本。
 - [ ] 在隔离边界可行后，复查 `flowcontext.zkabi.cn` 的 DNS、Nginx TLS 路由和 `/healthz`；不得影响已有 Nginx 站点。
+- [ ] 从服务器外部确认 HTTP 80 仅重定向到 HTTPS 443，并记录重定向状态码、最终域名与 TLS 成功结果。
+- [ ] 从服务器外部确认 TCP 5432 不可达，并确认直接 API 端口不可达；仅 `flowcontext.zkabi.cn` 的 Nginx HTTPS 边界可访问。
 
 ### 2. 受控部署账号
 
@@ -32,6 +34,8 @@
 - [ ] 仅在 Task7.5 的 Nginx→loopback/私有容器部署资产通过测试后运行修订后的预检；其失败时停止，不绕过 DNS、权限或 Nginx 共存检查。
 - [ ] 运行修订后的部署脚本并记录容器健康状态；Nginx 是唯一公网 TLS 边界，PostgreSQL 与 API 只留在 loopback/私有网络。
 - [ ] 从服务器外部执行 HTTPS `GET /healthz`，记录状态码、时间与域名；不要在证据中记录令牌或密码。
+- [ ] 在有已验证的最小测试数据和已绑定测试设备后，重启 FlowContext 容器；重启后验证业务数据持久，并验证设备凭据持久且仍能静默访问。失败即停止切换。
+- [ ] 检查容器/API 日志仅保留脱敏的运行诊断；日志不得包含 `.env` 值、密码、设备令牌、注册码、Authorization 头、完整导入行或业务正文。
 - [ ] 若部署、证书或外部健康检查失败，停止数据切换并执行本手册的回滚步骤。
 
 ### 4. 源数据冻结、备份与导入校验
@@ -49,8 +53,9 @@
 - [ ] 对每台设备分别生成唯一设备 ID，并为**每台设备**签发独立、一次性、预绑定的注册码；不得复用或批量共享注册码。
 - [ ] 通过受控渠道把对应注册码输入该设备；注册码、设备令牌和设备 ID 的映射不得写入本手册或日志。
 - [ ] 构建客户端产物后扫描产物与配置，确认不存在生产 Supabase URL、`supabase-js` 或 Supabase key；发现即停止发布。
-- [ ] 在 macOS 安装候选桌面应用，验证首次注册码绑定、重启后静默连接、项目/Topic/Session/To-do/Daily 读取与写入、SSE 实时更新，以及撤销设备后凭据清除和重新绑定。
-- [ ] 在 Windows 安装对应候选桌面应用，执行与 macOS 相同的核心检查；Windows 未实际通过时不得把跨设备切换标为完成。
+- [ ] 在 macOS 安装候选桌面应用，验证首次注册码绑定、重启后静默连接、项目/Topic/Session/To-do/Daily 读取与写入、SSE 实时更新、原 Codex thread deep link，以及撤销设备后凭据清除和重新绑定。
+- [ ] macOS 还须按原生浮窗验收矩阵回归：不抢焦点、热区、全屏 Space、关闭/重开和原有原生浮窗行为均无回归；未通过不得发布 Mac 版。
+- [ ] 在 Windows 安装对应候选桌面应用，执行与 macOS 相同的核心数据、免登录和原 Codex thread deep link 检查；Windows 未实际通过时不得把跨设备切换标为完成。
 
 ### 6. 回滚
 
@@ -70,8 +75,11 @@
 | 共存边界批准 | 用户确认独立域名/反向代理边界 | 未执行 |
 | 非 root 第二次独立登录 | 新 SSH key 的独立会话 | 未执行 |
 | 部署与外部健康 | `preflight.sh`、HTTPS `/healthz` | 未执行 |
+| 公网边界 | HTTP 80→HTTPS 443、5432/API 外网不可达 | 未执行 |
+| 重启持久性 | 容器重启后的数据与凭据持久 | 未执行 |
+| 日志脱敏 | 容器/API 日志不含敏感值 | 未执行 |
 | 源端冻结和备份 | 0600 导出、SHA-256、`manifest.json` | 未执行 |
 | 空目标导入与校验 | 导入、`verify --input` | 未执行 |
-| macOS 核心检查 | 绑定、重启、读写、SSE、撤销 | 未执行 |
-| Windows 核心检查 | 绑定、重启、读写、SSE、撤销 | 未执行 |
+| macOS 核心检查 | 绑定、重启、读写、SSE、Codex deep link、原生浮窗、撤销 | 未执行 |
+| Windows 核心检查 | 绑定、重启、读写、SSE、Codex deep link、撤销 | 未执行 |
 | 回滚演练或触发 | 触发条件和恢复结果 | 未执行 |

@@ -62,3 +62,21 @@ test("cutover runbook uses the approved isolated Nginx TLS boundary instead of C
   assert.match(document, /Caddy.*不得.*80\/443/);
   assert.match(document, /Task7\.5/);
 });
+
+test("cutover runbook requires edge, persistence, log-redaction, and desktop-regression evidence", async () => {
+  const document = await readFile(runbook, "utf8");
+
+  for (const required of [
+    "HTTP.*80.*443",
+    "5432",
+    "API.*不可达",
+    "容器重启",
+    "数据.*持久",
+    "凭据.*持久",
+    "日志.*脱敏",
+    "Codex.*deep link",
+    "原生浮窗",
+  ]) {
+    assert.match(document, new RegExp(required));
+  }
+});
