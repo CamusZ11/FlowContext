@@ -61,6 +61,9 @@ function asString(value: unknown): string | null {
 
 const DEVICE_TOKEN_KEY = "flowcontext.device-token";
 const DEVICE_TOKEN_DELETE_TOMBSTONE = "__flowcontext_device_token_delete_pending_v1__";
+const DEVICE_TOKEN_CLEAR_INTENT_GET = "device_token_clear_intent_get";
+const DEVICE_TOKEN_CLEAR_INTENT_SET = "device_token_clear_intent_set";
+const DEVICE_TOKEN_CLEAR_INTENT_REMOVE = "device_token_clear_intent_remove";
 
 function createMemorySessionStorage(): SessionStoragePort {
   const values = new Map<string, string>();
@@ -84,6 +87,29 @@ export function createTauriSessionStorage(
   fallbackStorage: SessionStoragePort = createFallbackSessionStorage(),
 ): SessionStoragePort {
   const get = async (key: string): Promise<string | null> => {
+    if (key === DEVICE_TOKEN_KEY) {
+      let clearPending: boolean;
+      try {
+        clearPending = await invoke(DEVICE_TOKEN_CLEAR_INTENT_GET) === true;
+      } catch {
+        // If the independent intent store cannot be read, fail closed rather
+        // than risk returning a native credential that was previously cleared.
+        // A process-memory value cannot survive a restart, so it remains safe.
+        return await fallbackStorage.get(key);
+      }
+      if (clearPending) {
+        const fallbackValue = await fallbackStorage.get(key);
+        if (fallbackValue) return fallbackValue;
+        try {
+          await invoke("secure_storage_remove", { key });
+          await invoke(DEVICE_TOKEN_CLEAR_INTENT_REMOVE);
+        } catch {
+          // The durable marker remains, so every later launch retries cleanup.
+        }
+        await fallbackStorage.remove(key);
+        return null;
+      }
+    }
     try {
       const nativeValue = asString(await invoke("secure_storage_get", { key }));
       if (key !== DEVICE_TOKEN_KEY || nativeValue !== DEVICE_TOKEN_DELETE_TOMBSTONE) {
@@ -110,23 +136,26 @@ export function createTauriSessionStorage(
       return;
     }
     await fallbackStorage.remove(key);
+    if (key === DEVICE_TOKEN_KEY) {
+      await invoke(DEVICE_TOKEN_CLEAR_INTENT_REMOVE);
+    }
   };
   const remove = async (key: string) => {
     if (key === DEVICE_TOKEN_KEY) {
+      await invoke(DEVICE_TOKEN_CLEAR_INTENT_SET);
+      await fallbackStorage.remove(key);
+      let tombstoneReason: unknown;
       try {
         await invoke("secure_storage_set", { key, value: DEVICE_TOKEN_DELETE_TOMBSTONE });
-      } catch (tombstoneReason: unknown) {
-        try {
-          await invoke("secure_storage_remove", { key });
-        } catch {
-          await fallbackStorage.remove(key);
-          throw tombstoneReason;
-        }
-        await fallbackStorage.remove(key);
-        return;
+      } catch (reason: unknown) {
+        tombstoneReason = reason;
       }
-      await fallbackStorage.remove(key);
-      await invoke("secure_storage_remove", { key });
+      try {
+        await invoke("secure_storage_remove", { key });
+      } catch (reason: unknown) {
+        throw tombstoneReason ?? reason;
+      }
+      await invoke(DEVICE_TOKEN_CLEAR_INTENT_REMOVE);
       return;
     }
     try {

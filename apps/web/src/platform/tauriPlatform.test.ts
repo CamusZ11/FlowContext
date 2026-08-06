@@ -164,6 +164,57 @@ describe("Tauri platform", () => {
     expect(removeCalls).toBe(3);
   });
 
+  it("does not resurrect a token after both the protected tombstone write and delete fail", async () => {
+    const values = new Map([
+      ["device-id", "device-mac-1"],
+      ["flowcontext.device-token", "persistent-session"],
+    ]);
+    let clearIntent = false;
+    let failTokenSet = true;
+    let failTokenRemove = true;
+    const invoke: TauriInvoke = async (command, args) => {
+      const key = String(args?.key ?? "");
+      if (command === "device_token_clear_intent_get") return clearIntent;
+      if (command === "device_token_clear_intent_set") {
+        clearIntent = true;
+        return null;
+      }
+      if (command === "device_token_clear_intent_remove") {
+        clearIntent = false;
+        return null;
+      }
+      if (command === "secure_storage_get") return values.get(key) ?? null;
+      if (command === "secure_storage_set") {
+        if (key === "flowcontext.device-token" && failTokenSet) {
+          throw new Error("keychain tombstone write failed");
+        }
+        values.set(key, String(args?.value ?? ""));
+        return null;
+      }
+      if (command === "secure_storage_remove") {
+        if (key === "flowcontext.device-token" && failTokenRemove) {
+          throw new Error("keychain delete failed");
+        }
+        values.delete(key);
+      }
+      return null;
+    };
+    const firstLaunch = await createTauriPlatform({ invoke });
+
+    await expect(firstLaunch.sessionStorage.remove("flowcontext.device-token"))
+      .rejects.toThrow("keychain tombstone write failed");
+
+    const restartedLaunch = await createTauriPlatform({ invoke });
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBeNull();
+    expect(values.get("flowcontext.device-token")).toBe("persistent-session");
+
+    failTokenSet = false;
+    failTokenRemove = false;
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBeNull();
+    expect(values.has("flowcontext.device-token")).toBe(false);
+    expect(clearIntent).toBe(false);
+  });
+
   it("also deletes the process-memory copy after native credential deletion succeeds", async () => {
     const nativeValues = new Map([
       ["device-id", "device-mac-1"],

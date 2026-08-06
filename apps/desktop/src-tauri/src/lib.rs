@@ -60,6 +60,9 @@ pub fn run() {
             native_commands::secure_storage_get,
             native_commands::secure_storage_set,
             native_commands::secure_storage_remove,
+            native_commands::device_token_clear_intent_get,
+            native_commands::device_token_clear_intent_set,
+            native_commands::device_token_clear_intent_remove,
             native_commands::open_codex_link
         ])
         // This plugin must be registered first: a second launch focuses this
