@@ -6,11 +6,12 @@ site_name=flowcontext.zkabi.cn
 available=/etc/nginx/sites-available/$site_name
 enabled=/etc/nginx/sites-enabled/$site_name
 cert_include=/etc/nginx/snippets/$site_name-certbot.conf
-installed=0
+available_created=0
+enabled_created=0
 
 rollback() {
-  [ "$installed" -eq 1 ] || return 0
-  rm -f "$enabled" "$available"
+  [ "$enabled_created" -eq 0 ] || rm -f "$enabled"
+  [ "$available_created" -eq 0 ] || rm -f "$available"
 }
 
 trap 'rollback' EXIT HUP INT TERM
@@ -35,10 +36,12 @@ esac
 [ ! -e "$enabled" ] || fail "refusing to replace an existing Nginx site link: $enabled"
 
 install -m 0644 "$source" "$available"
+available_created=1
 ln -s "$available" "$enabled"
-installed=1
+enabled_created=1
 nginx -t || fail "Nginx validation failed; only the new site files were removed"
 nginx -s reload || fail "Nginx reload failed; only the new site files were removed"
-installed=0
+available_created=0
+enabled_created=0
 trap - EXIT HUP INT TERM
 printf '%s\n' "installed isolated Nginx site: $site_name"

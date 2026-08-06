@@ -37,7 +37,7 @@ rm /etc/nginx/sites-enabled/flowcontext.zkabi.cn /etc/nginx/sites-available/flow
 ```
 证书路径只保存在服务器受限目录，不在仓库模板、`.env` 或聊天记录中。续期时应保留 ACME webroot 路由；配置 Certbot 的 deploy hook 只测试并 reload Nginx。
 ## 部署与日常运维
-以非 root SSH 部署账号运行 `./preflight.sh`，再运行 `./deploy.sh`。预检验证 `.env` 权限、域名、Nginx 安装、Docker Compose 和未占用的回环 `18080`；Nginx 配置仅在 root 站点安装脚本中由 `nginx -t` 验证。部署等待容器健康，先验证内部 HTTP，再经 Nginx HTTPS 复验。任一步失败会非零退出且不会打印成功 URL。
+以非 root SSH 部署账号运行 `./preflight.sh`，再运行 `./deploy.sh`。首次部署时预检要求回环 `18080` 空闲；重部署时仅允许该端口已由当前 Compose 项目的 Caddy 以 `127.0.0.1:18080` 受管监听。预检还会验证 `.env` 权限、域名、Nginx 安装和 Docker Compose；Nginx 配置仅在 root 站点安装脚本中由 `nginx -t` 验证。部署等待容器健康，先验证内部 HTTP，再经 Nginx HTTPS 复验。任一步失败会非零退出且不会打印成功 URL。
 为新设备签发一次性注册码：
 ```sh
 ./create-enrollment.sh <device-id UUID>

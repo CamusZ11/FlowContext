@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -133,7 +133,37 @@ test("Nginx template is limited to the approved host and loopback proxy", async 
   assert.match(installer, /sites-enabled/);
   assert.match(installer, /trap 'rollback' EXIT HUP INT TERM/);
   assert.match(installer, /nginx -s reload \|\| fail/);
-  assert.match(installer, /rm -f "\$enabled" "\$available"/);
+  assert.match(installer, /enabled_created=1/);
+  assert.match(installer, /available_created=1/);
+  assert.match(installer, /\[ "\$enabled_created" -eq 0 \] \|\| rm -f "\$enabled"/);
+  assert.match(installer, /\[ "\$available_created" -eq 0 \] \|\| rm -f "\$available"/);
+});
+
+test("Nginx installer removes only its own available file when link creation fails", async (t) => {
+  if (spawnSync("docker", ["version"], { stdio: "ignore" }).status !== 0) {
+    t.skip("Docker is required for the installer behavior test");
+    return;
+  }
+  const fakeBin = await mkdtemp(join(tmpdir(), "flowcontext-nginx-fake-bin-"));
+  try {
+    const failLink = join(fakeBin, "ln");
+    await writeFile(failLink, "#!/bin/sh\nexit 1\n");
+    await chmod(failLink, 0o755);
+    const deployRoot = new URL("..", import.meta.url).pathname;
+    const result = spawnSync("docker", [
+      "run", "--rm",
+      "-v", `${deployRoot}:/work:ro`,
+      "-v", `${fakeBin}:/fake:ro`,
+      "alpine:3.20",
+      "sh", "-c",
+      "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled; PATH=/fake:$PATH /work/install-nginx-site.sh --http-only; status=$?; if [ ! -e /etc/nginx/sites-available/flowcontext.zkabi.cn ] && [ ! -e /etc/nginx/sites-enabled/flowcontext.zkabi.cn ]; then echo rolled-back; fi; exit $status",
+    ], { encoding: "utf8" });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /rolled-back/);
+  } finally {
+    await rm(fakeBin, { recursive: true, force: true });
+  }
 });
 
 test("strict environment loader accepts only the complete literal whitelist", async () => {
