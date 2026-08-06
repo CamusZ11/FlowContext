@@ -29,3 +29,12 @@
 - API admin/enrollment suite: 46 tests passing (with five opt-in PostgreSQL tests skipped in the normal suite).
 - Disposable PostgreSQL: 5/5 passing with migrations 001–005 applied, then container and network removed.
 - Full `pnpm verify`: passing.
+## Second review remediation
+- `deploy.sh` now independently requires and mode-checks `.env`, loads it in its own shell, and requires `FLOWCONTEXT_PUBLIC_URL` before Compose validation, wait, HTTPS health validation, or a success URL. No value is printed before the final success line.
+- `preflight.sh` now requires `ss` and fails closed when any process listens on TCP 80 or 443; it only reports a free-port summary when both are available. This deliberately does not attempt a permissive Caddy-container exception, preventing an unrelated listener from being replaced.
+- Contract coverage was expanded for both independent deploy loading and the closed port-conflict gate.
+## Second remediation verification
+- `node --test deploy/flowcontext/test/compose-contract.test.mjs` — pass (4/4).
+- Shell syntax checks and Compose config using contract-only values — pass.
+- Disposable PostgreSQL `test:postgres` — pass (5/5), then test container/network removed.
+- `pnpm verify` — pass.

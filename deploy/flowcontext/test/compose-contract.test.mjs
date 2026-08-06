@@ -77,6 +77,13 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(preflight, /0600/);
   assert.match(preflight, /docker compose --env-file \.env config/);
   assert.match(preflight, /ss -ltn/);
+  assert.match(preflight, /ss -ltnH/);
+  assert.match(preflight, /TCP 80 or 443 already has a listener/);
+  assert.match(preflight, /grep -q '\.'/);
+  assert.match(deploy, /\[ -f "\$root_dir\/\.env" \]/);
+  assert.match(deploy, /stat -c/);
+  assert.match(deploy, /\. "\$root_dir\/\.env"/);
+  assert.match(deploy, /FLOWCONTEXT_PUBLIC_URL is required/);
   assert.match(deploy, /docker compose --env-file \.env config/);
   assert.match(deploy, /docker compose --env-file \.env up -d --build --wait/);
   assert.match(deploy, /curl .*https:\/\/\$FLOWCONTEXT_PUBLIC_URL\/healthz/);

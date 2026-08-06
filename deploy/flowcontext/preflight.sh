@@ -37,8 +37,9 @@ docker compose --env-file .env config >/dev/null || fail "docker compose configu
 mkdir -p "$data_dir/caddy-data" "$data_dir/caddy-config" || fail "data path is not writable"
 [ -w "$data_dir/caddy-data" ] && [ -w "$data_dir/caddy-config" ] || fail "data path is not writable"
 
-if command -v ss >/dev/null 2>&1; then
-  printf '%s\n' "listener summary (ports 80/443 before deployment):"
-  ss -ltn '( sport = :80 or sport = :443 )' || true
+command -v ss >/dev/null 2>&1 || fail "ss is required to check public listener conflicts"
+if ss -ltnH '( sport = :80 or sport = :443 )' | grep -q '.'; then
+  fail "TCP 80 or 443 already has a listener"
 fi
+printf '%s\n' "listener summary: ports 80/443 are free"
 printf '%s\n' "preflight passed"
