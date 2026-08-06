@@ -13,7 +13,7 @@ const serviceBlock = (compose, service) => {
   return match[1];
 };
 
-test("compose keeps database and API private behind a loopback-only Caddy", async () => {
+test("compose keeps database and API private while Caddy joins a non-internal edge network for loopback publishing", async () => {
   const compose = await read("docker-compose.yml");
 
   assert.match(compose, /^\s*postgres:\s*$/m);
@@ -24,11 +24,14 @@ test("compose keeps database and API private behind a loopback-only Caddy", asyn
   assert.doesNotMatch(serviceBlock(compose, "postgres"), /^\s*ports:/m);
   assert.doesNotMatch(serviceBlock(compose, "api"), /^\s*ports:/m);
   assert.match(compose, /flowcontext_internal:\s*\n\s*internal: true/);
+  assert.match(compose, /flowcontext_edge:\s*\n\s*internal: false/);
   for (const service of ["postgres", "api"]) {
     const networkBlock = serviceBlock(compose, service);
     assert.match(networkBlock, /- flowcontext_internal/);
     assert.doesNotMatch(networkBlock, /flowcontext_edge/);
   }
+  const caddy = serviceBlock(compose, "caddy");
+  assert.match(caddy, /networks:\s*\n\s*- flowcontext_internal\s*\n\s*- flowcontext_edge/);
 });
 
 test("compose has persistent, healthy, restarting services without embedded secrets", async () => {

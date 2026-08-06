@@ -1,5 +1,5 @@
 # FlowContext 自托管部署
-该目录部署私有 PostgreSQL、FlowContext API 和内部 Caddy。现有 Nginx 独占公网 80/443 与 `flowcontext.zkabi.cn` 的 TLS；Caddy 只监听主机回环地址 `127.0.0.1:18080`。数据库和 API 没有主机端口。
+该目录部署私有 PostgreSQL、FlowContext API 和内部 Caddy。现有 Nginx 独占公网 80/443 与 `flowcontext.zkabi.cn` 的 TLS；Caddy 只监听主机回环地址 `127.0.0.1:18080`。为让 Docker 正确发布该回环端口，Caddy 同时接入受控的非内部 edge 网络；PostgreSQL 与 API 仍只在 internal 网络中，均没有主机端口。
 ## 前置条件
 - 一台已由 Nginx 服务其他站点的 Linux 服务器，部署账号使用 SSH key（非 root）。
 - `flowcontext.zkabi.cn` 已解析到此服务器；公网 80/443 继续由现有 Nginx 管理。
