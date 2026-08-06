@@ -18,16 +18,17 @@ export interface AppProps {
   repository: FlowRepository;
   platform: PlatformPort;
   auth?: AuthPort;
+  authApiUrl?: string;
 }
 
-export function App({ mode = "web", repository, platform, auth }: AppProps) {
+export function App({ mode = "web", repository, platform, auth, authApiUrl }: AppProps) {
   const content = (rolloverIdentity?: string) => (
     <AppProviders repository={repository} platform={{ ...platform, mode }}>
       <AppContent mode={mode} rolloverIdentity={rolloverIdentity} />
     </AppProviders>
   );
   return auth
-    ? <AuthGate auth={auth}>{(session) => content(session.userId)}</AuthGate>
+    ? <AuthGate auth={auth} apiUrl={authApiUrl}>{(session) => content(session.userId)}</AuthGate>
     : content();
 }
 

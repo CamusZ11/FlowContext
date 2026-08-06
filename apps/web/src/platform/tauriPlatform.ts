@@ -9,6 +9,7 @@ export interface TauriPlatformOptions {
   invoke: TauriInvoke;
   now?: () => Date;
   createDeviceId?: () => string;
+  devicePlatform?: "macos" | "windows";
   fallbackStorage?: SessionStoragePort;
 }
 
@@ -46,6 +47,12 @@ function nativeDeviceId(): string {
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
   }
   return `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function nativeDevicePlatform(): "macos" | "windows" {
+  return typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent)
+    ? "windows"
+    : "macos";
 }
 
 function asString(value: unknown): string | null {
@@ -131,6 +138,7 @@ export async function createTauriPlatform(options: TauriPlatformOptions): Promis
 
   return {
     mode: "desktop",
+    devicePlatform: options.devicePlatform ?? nativeDevicePlatform(),
     deviceId,
     today: () => localIsoDate(now),
     openExternal: async (url) => {
@@ -148,6 +156,7 @@ export async function createRuntimePlatform(options: RuntimePlatformOptions = {}
     invoke,
     now: options.now,
     createDeviceId: options.createDeviceId,
+    devicePlatform: options.devicePlatform,
     fallbackStorage: options.fallbackStorage,
   });
 }

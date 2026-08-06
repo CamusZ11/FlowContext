@@ -1,18 +1,14 @@
 import { createRoot } from "react-dom/client";
 import type { FlowRepository } from "@flowcontext/data";
-import {
-  HttpFlowRepository,
-  SupabaseFlowRepository,
-} from "@flowcontext/data";
+import { HttpFlowRepository } from "@flowcontext/data";
 import type { Todo, TodoCreate, TodoPatch, TopicCard } from "@flowcontext/domain";
 import { App } from "./app/App";
 import {
   createHttpAuth,
-  createSupabaseAuth,
+  DEVICE_TOKEN_STORAGE_KEY,
   type AuthPort,
 } from "./features/auth/useAuth";
 import { createRuntimePlatform } from "./platform/tauriPlatform";
-import { createConfiguredSupabaseClient } from "./supabaseClientFactory";
 import { getBootstrapErrorDetail, type BootstrapErrorKind } from "./bootstrapMessages";
 import "./styles/tokens.css";
 import "./styles/layout.css";
@@ -67,8 +63,8 @@ function createE2eAuth(): AuthPort {
   return {
     getSession: async () => ({ userId: "e2e-user", email: "e2e@example.test" }),
     onAuthStateChange: () => () => undefined,
-    signIn: async () => undefined,
-    signOut: async () => undefined,
+    enroll: async () => ({ userId: "e2e-user", email: "e2e@example.test" }),
+    clearDeviceCredential: async () => undefined,
   };
 }
 
@@ -141,47 +137,34 @@ async function bootstrap() {
     return;
   }
 
-  if (provider === "self-hosted") {
-    const apiUrl = import.meta.env.VITE_FLOWCONTEXT_API_URL?.trim();
-    if (!apiUrl) {
-      renderConfigurationError(root, provider);
-      return;
-    }
-    try {
-      const storage = platform.sessionStorage;
-      createRoot(root).render(
-        <App
-          mode={platform.mode}
-          repository={new HttpFlowRepository({
-            baseUrl: apiUrl,
-            getAccessToken: () => storage.get("auth-token"),
-            getTimezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-          })}
-          platform={platform}
-          auth={createHttpAuth({ baseUrl: apiUrl, storage })}
-        />,
-      );
-    } catch {
-      renderRuntimeError(root, provider);
-    }
-    return;
-  }
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (provider !== "self-hosted") {
     renderConfigurationError(root, provider);
     return;
   }
 
+  const apiUrl = import.meta.env.VITE_FLOWCONTEXT_API_URL?.trim();
+  if (!apiUrl) {
+    renderConfigurationError(root, provider);
+    return;
+  }
   try {
-    const client = createConfiguredSupabaseClient(import.meta.env, platform.sessionStorage);
+    const storage = platform.sessionStorage;
     createRoot(root).render(
       <App
         mode={platform.mode}
-        repository={new SupabaseFlowRepository(client)}
+        repository={new HttpFlowRepository({
+          baseUrl: apiUrl,
+          getAccessToken: () => storage.get(DEVICE_TOKEN_STORAGE_KEY),
+          getTimezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+        })}
         platform={platform}
-        auth={createSupabaseAuth(client)}
+        auth={createHttpAuth({
+          baseUrl: apiUrl,
+          storage,
+          deviceId: platform.deviceId,
+          devicePlatform: platform.devicePlatform,
+        })}
+        authApiUrl={apiUrl}
       />,
     );
   } catch {

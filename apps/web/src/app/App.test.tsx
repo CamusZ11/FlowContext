@@ -3,6 +3,8 @@ import type { FlowRepository } from "@flowcontext/data";
 import { App } from "./App";
 import { webPlatform } from "../platform/webPlatform";
 
+const fixedPlatform = { ...webPlatform, today: () => "2026-08-05" };
+
 const fakeRepository: FlowRepository = {
   capabilities: { todoRollover: true },
   listTodos: async () => [],
@@ -18,7 +20,7 @@ const fakeRepository: FlowRepository = {
 
 describe("App shell", () => {
   it("keeps sync status aligned with the brand without a headline", () => {
-    const { container } = render(<App mode="desktop" repository={fakeRepository} platform={webPlatform} />);
+    const { container } = render(<App mode="desktop" repository={fakeRepository} platform={fixedPlatform} />);
     const headings = screen.getAllByRole("heading").map((node) => node.textContent);
     expect(headings).toEqual(expect.arrayContaining(["08 / 05", "建议继续", "Daily Lens"]));
     expect(screen.queryByRole("heading", { name: "今天，继续推进" })).not.toBeInTheDocument();
@@ -31,7 +33,7 @@ describe("App shell", () => {
   });
 
   it("uses the todo date selection for the Daily Lens", () => {
-    render(<App mode="desktop" repository={fakeRepository} platform={webPlatform} />);
+    render(<App mode="desktop" repository={fakeRepository} platform={fixedPlatform} />);
 
     fireEvent.change(document.querySelector('input[type="date"]')!, { target: { value: "2026-08-19" } });
 

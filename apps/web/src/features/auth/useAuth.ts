@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { useEffect, useState } from "react";
+
+export const DEVICE_TOKEN_STORAGE_KEY = "flowcontext.device-token";
 
 export interface AuthSession {
   userId: string;
   email?: string | null;
 }
 
-export interface AuthPort {
+export interface DeviceEnrollmentInput {
+  apiUrl: string;
+  enrollmentCode: string;
+}
+
+export interface PasswordlessAuthPort {
   getSession(): Promise<AuthSession | null>;
   onAuthStateChange(listener: (session: AuthSession | null) => void): () => void;
-  signIn(email: string, password: string): Promise<void>;
-  signOut(): Promise<void>;
+  enroll(input: DeviceEnrollmentInput): Promise<AuthSession>;
+  clearDeviceCredential(): Promise<void>;
 }
+
+export type AuthPort = PasswordlessAuthPort;
 
 type Awaitable<T> = T | PromiseLike<T>;
 
@@ -38,6 +46,8 @@ export type HttpAuthStorage =
 export interface HttpAuthFetchOptions {
   baseUrl: string;
   storage: HttpAuthStorage;
+  deviceId?: string;
+  devicePlatform?: "macos" | "windows";
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
 }
 
@@ -58,18 +68,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function readAuthToken(storage: HttpAuthStorage): Promise<string | null> {
-  if (typeof storage.get === "function") return await storage.get("auth-token");
-  if (typeof storage.getItem === "function") return await storage.getItem("auth-token");
+  if (typeof storage.get === "function") return await storage.get(DEVICE_TOKEN_STORAGE_KEY);
+  if (typeof storage.getItem === "function") return await storage.getItem(DEVICE_TOKEN_STORAGE_KEY);
   throw new Error("auth storage must implement get/set/remove or getItem/setItem/removeItem");
 }
 
 async function writeAuthToken(storage: HttpAuthStorage, value: string): Promise<void> {
   if (typeof storage.set === "function") {
-    await storage.set("auth-token", value);
+    await storage.set(DEVICE_TOKEN_STORAGE_KEY, value);
     return;
   }
   if (typeof storage.setItem === "function") {
-    await storage.setItem("auth-token", value);
+    await storage.setItem(DEVICE_TOKEN_STORAGE_KEY, value);
     return;
   }
   throw new Error("auth storage must implement get/set/remove or getItem/setItem/removeItem");
@@ -77,11 +87,11 @@ async function writeAuthToken(storage: HttpAuthStorage, value: string): Promise<
 
 async function clearAuthToken(storage: HttpAuthStorage): Promise<void> {
   if (typeof storage.remove === "function") {
-    await storage.remove("auth-token");
+    await storage.remove(DEVICE_TOKEN_STORAGE_KEY);
     return;
   }
   if (typeof storage.removeItem === "function") {
-    await storage.removeItem("auth-token");
+    await storage.removeItem(DEVICE_TOKEN_STORAGE_KEY);
     return;
   }
   throw new Error("auth storage must implement get/set/remove or getItem/setItem/removeItem");
@@ -137,7 +147,13 @@ function asSession(value: unknown): AuthSession | null {
  * leave the injected storage and are only read when constructing a Bearer
  * header for an authenticated request.
  */
-export function createHttpAuth({ baseUrl, storage, fetchImpl }: HttpAuthFetchOptions): AuthPort {
+export function createHttpAuth({
+  baseUrl,
+  storage,
+  deviceId,
+  devicePlatform,
+  fetchImpl,
+}: HttpAuthFetchOptions): PasswordlessAuthPort {
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
   if (!normalizedBaseUrl) throw new Error("FlowContext API URL is required");
   const requestFetch = fetchImpl ?? ((input: string, init?: RequestInit) => fetch(input, init));
@@ -148,6 +164,7 @@ export function createHttpAuth({ baseUrl, storage, fetchImpl }: HttpAuthFetchOpt
   };
 
   const request = async (
+    requestBaseUrl: string,
     path: string,
     method: "GET" | "POST",
     body?: Record<string, unknown>,
@@ -161,7 +178,7 @@ export function createHttpAuth({ baseUrl, storage, fetchImpl }: HttpAuthFetchOpt
       const token = await readAuthToken(storage);
       if (token) headers.Authorization = `Bearer ${token}`;
     }
-    const response = await requestFetch(`${normalizedBaseUrl}${path}`, {
+    const response = await requestFetch(`${requestBaseUrl}${path}`, {
       method,
       headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -170,21 +187,29 @@ export function createHttpAuth({ baseUrl, storage, fetchImpl }: HttpAuthFetchOpt
     return response;
   };
 
-  return {
-    async getSession() {
-      try {
-        const response = await request("/v1/auth/session", "GET");
-        const session = asSession(await parseHttpAuthJson(response));
-        if (!session) throw new HttpAuthError("invalid_response", response.status);
-        return session;
-      } catch (reason: unknown) {
-        if (reason instanceof HttpAuthError && reason.status === 401) {
+  const getSessionAt = async (requestBaseUrl: string): Promise<AuthSession | null> => {
+    const token = await readAuthToken(storage);
+    if (!token) return null;
+    try {
+      const response = await request(requestBaseUrl, "/v1/auth/session", "GET");
+      const session = asSession(await parseHttpAuthJson(response));
+      if (!session) throw new HttpAuthError("invalid_response", response.status);
+      return session;
+    } catch (reason: unknown) {
+      if (reason instanceof HttpAuthError && reason.status === 401) {
+        if (await readAuthToken(storage) === token) {
           await clearAuthToken(storage);
           notify(null);
-          return null;
         }
-        throw reason;
+        return null;
       }
+      throw reason;
+    }
+  };
+
+  return {
+    async getSession() {
+      return getSessionAt(normalizedBaseUrl);
     },
     onAuthStateChange(listener) {
       listeners.add(listener);
@@ -195,54 +220,37 @@ export function createHttpAuth({ baseUrl, storage, fetchImpl }: HttpAuthFetchOpt
         listeners.delete(listener);
       };
     },
-    async signIn(email, password) {
+    async enroll({ apiUrl, enrollmentCode }) {
+      const enrollmentBaseUrl = apiUrl.replace(/\/+$/, "");
+      if (!enrollmentBaseUrl || !enrollmentCode || !deviceId || !devicePlatform) {
+        throw new HttpAuthError("invalid_enrollment", 422);
+      }
       const response = await request(
-        "/v1/auth/sign-in",
+        enrollmentBaseUrl,
+        "/v1/devices/enroll",
         "POST",
-        { email, password },
+        { enrollmentCode, deviceId, platform: devicePlatform },
         false,
       );
       const payload = await parseHttpAuthJson(response);
-      if (!isRecord(payload) || typeof payload.accessToken !== "string" || !payload.accessToken) {
+      if (
+        !isRecord(payload)
+        || typeof payload.deviceToken !== "string"
+        || !payload.deviceToken
+        || typeof payload.userId !== "string"
+        || !payload.userId
+      ) {
         throw new HttpAuthError("invalid_response", response.status);
       }
-      await writeAuthToken(storage, payload.accessToken);
-      notify(asSession(payload));
+      await writeAuthToken(storage, payload.deviceToken);
+      const session = await getSessionAt(enrollmentBaseUrl);
+      if (!session) throw new HttpAuthError("device_unauthorized", 401);
+      notify(session);
+      return session;
     },
-    async signOut() {
-      try {
-        await request("/v1/auth/sign-out", "POST");
-      } catch (reason: unknown) {
-        if (!(reason instanceof HttpAuthError) || reason.status !== 401) throw reason;
-      }
+    async clearDeviceCredential() {
       await clearAuthToken(storage);
       notify(null);
-    },
-  };
-}
-
-export function createSupabaseAuth(client: SupabaseClient): AuthPort {
-  return {
-    async getSession() {
-      const { data, error } = await client.auth.getSession();
-      if (error) throw error;
-      return data.session?.user
-        ? { userId: data.session.user.id, email: data.session.user.email }
-        : null;
-    },
-    onAuthStateChange(listener) {
-      const { data } = client.auth.onAuthStateChange((_event, session) => {
-        listener(session?.user ? { userId: session.user.id, email: session.user.email } : null);
-      });
-      return () => data.subscription.unsubscribe();
-    },
-    async signIn(email, password) {
-      const { error } = await client.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    },
-    async signOut() {
-      const { error } = await client.auth.signOut();
-      if (error) throw error;
     },
   };
 }
@@ -279,15 +287,5 @@ export function useAuth(auth: AuthPort) {
     };
   }, [auth]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    await auth.signIn(email, password);
-    setSession(await auth.getSession());
-  }, [auth]);
-
-  const signOut = useCallback(async () => {
-    await auth.signOut();
-    setSession(null);
-  }, [auth]);
-
-  return { session, loading, error, signIn, signOut };
+  return { session, loading, error };
 }

@@ -43,13 +43,15 @@ describe("Tauri platform", () => {
       invoke,
       now: () => new Date("2026-08-03T08:00:00+08:00"),
       createDeviceId: () => "device-mac-1",
+      devicePlatform: "macos",
     });
 
     expect(platform.mode).toBe("desktop");
+    expect(platform.devicePlatform).toBe("macos");
     expect(platform.today()).toBe("2026-08-03");
   });
 
-  it("stores auth sessions through native secure storage, never browser localStorage", async () => {
+  it("stores the device token through native secure storage, never browser localStorage", async () => {
     const { invoke, calls } = secureInvoke();
     const fallbackSet = vi.fn();
     const fallbackStorage = {
@@ -66,15 +68,16 @@ describe("Tauri platform", () => {
       fallbackStorage,
     });
 
-    await platform.sessionStorage.set("supabase.session", "secret-session");
+    await platform.sessionStorage.set("flowcontext.device-token", "secret-session");
     expect(fallbackSet).not.toHaveBeenCalled();
     expect(calls).toContainEqual({
       command: "secure_storage_set",
-      args: { key: "supabase.session", value: "secret-session" },
+      args: { key: "flowcontext.device-token", value: "secret-session" },
     });
   });
 
   it("keeps sessions in memory when native secure storage is unavailable", async () => {
+    window.localStorage.clear();
     const invoke: TauriInvoke = async () => {
       throw new Error("keychain unavailable");
     };
@@ -83,10 +86,11 @@ describe("Tauri platform", () => {
       createDeviceId: () => "device-fallback-1",
     });
 
-    await platform.sessionStorage.set("supabase.session", "secret-session");
+    await platform.sessionStorage.set("flowcontext.device-token", "secret-session");
 
     expect(platform.deviceId).toBe("device-fallback-1");
-    expect(await platform.sessionStorage.get("supabase.session")).toBe("secret-session");
+    expect(await platform.sessionStorage.get("flowcontext.device-token")).toBe("secret-session");
+    expect(window.localStorage.getItem("flowcontext.device-token")).toBeNull();
   });
 
   it("persists a session after a temporary Keychain failure during startup", async () => {
@@ -114,14 +118,14 @@ describe("Tauri platform", () => {
       invoke,
       createDeviceId: () => "device-mac-1",
     });
-    await firstLaunch.sessionStorage.set("supabase.session", "persistent-session");
+    await firstLaunch.sessionStorage.set("flowcontext.device-token", "persistent-session");
 
     const restartedLaunch = await createTauriPlatform({
       invoke,
       createDeviceId: () => "device-mac-2",
     });
 
-    expect(await restartedLaunch.sessionStorage.get("supabase.session")).toBe("persistent-session");
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBe("persistent-session");
   });
 
   it("opens codex links through the validated native command", async () => {

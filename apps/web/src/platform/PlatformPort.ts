@@ -9,6 +9,8 @@ export interface SessionStoragePort {
 
 export interface PlatformPort {
   mode: "web" | "desktop";
+  /** Native device family used by the enrollment API. */
+  devicePlatform?: "macos" | "windows";
   /** Explicit device identity; absent means the device is not configured. */
   deviceId?: string;
   today(): string;

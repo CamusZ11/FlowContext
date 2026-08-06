@@ -1,6 +1,17 @@
 import { createBrowserSessionStorage } from "./browserSessionStorage";
 
 describe("browser session storage", () => {
+  it("uses browser sessionStorage for the explicitly non-production credential", () => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    const storage = createBrowserSessionStorage(undefined, "flowcontext-dev-test");
+
+    storage.set("flowcontext.device-token", "temporary-token");
+
+    expect(window.sessionStorage.getItem("flowcontext-dev-test:flowcontext.device-token")).toBe("temporary-token");
+    expect(window.localStorage.getItem("flowcontext-dev-test:flowcontext.device-token")).toBeNull();
+  });
+
   it("namespaces both app and Supabase-compatible accessors", () => {
     const values = new Map<string, string>();
     const backing = {

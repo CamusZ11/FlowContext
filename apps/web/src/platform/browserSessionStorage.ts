@@ -13,7 +13,9 @@ export interface SupabaseStorageLike {
 }
 
 export function createBrowserSessionStorage(
-  storage: StringStorageLike | undefined = typeof window === "undefined" ? undefined : window.localStorage,
+  // Browser credentials are a development-only convenience and must expire
+  // with the tab. Production desktop builds use native secure storage.
+  storage: StringStorageLike | undefined = typeof window === "undefined" ? undefined : window.sessionStorage,
   namespace = "flowcontext",
 ): SessionStoragePort & SupabaseStorageLike {
   const availableStorage = isStringStorageLike(storage) ? storage : undefined;

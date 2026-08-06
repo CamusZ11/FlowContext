@@ -13,6 +13,7 @@ function localIsoDate(): string {
 
 export const webPlatform: PlatformPort = {
   mode: "web",
+  devicePlatform: getPublicDevicePlatform(),
   deviceId: getPublicDeviceId(),
   today: localIsoDate,
   openExternal: async (url) => {
@@ -23,8 +24,19 @@ export const webPlatform: PlatformPort = {
   sessionStorage: webSessionStorage,
 };
 
+function getPublicDevicePlatform(): "macos" | "windows" {
+  return typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent)
+    ? "windows"
+    : "macos";
+}
+
 function getPublicDeviceId(): string | undefined {
   const configured = (import.meta as ImportMeta & { env?: { VITE_FLOWCONTEXT_DEVICE_ID?: string } }).env?.VITE_FLOWCONTEXT_DEVICE_ID?.trim();
   const stored = webSessionStorage.get("device-id") as string | null;
-  return configured || stored || undefined;
+  if (configured || stored) return configured || stored || undefined;
+  const generated = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : undefined;
+  if (generated) webSessionStorage.set("device-id", generated);
+  return generated;
 }

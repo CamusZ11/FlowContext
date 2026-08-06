@@ -1,63 +1,72 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { AuthPort, AuthSession } from "./useAuth";
+import { PlatformProvider } from "../../app/PlatformContext";
+import type { PlatformPort } from "../../platform/PlatformPort";
+import type { AuthSession, PasswordlessAuthPort } from "./useAuth";
 import { AuthGate } from "./AuthGate";
-import { LoginForm } from "./LoginForm";
 
-function fakeAuth(session: AuthSession | null): AuthPort {
+function fakeAuth(session: AuthSession | null, failInitialSession = false): PasswordlessAuthPort {
   let current = session;
+  let shouldFail = failInitialSession;
   const listeners = new Set<(value: AuthSession | null) => void>();
-  return {
-    getSession: async () => current,
-    onAuthStateChange: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    signIn: async () => {
-      current = { userId: "user-1" };
-      listeners.forEach((listener) => listener(current));
-    },
-    signOut: async () => {
-      current = null;
-      listeners.forEach((listener) => listener(current));
-    },
-  };
-}
-
-function flakyAuth(): AuthPort {
-  let current: AuthSession | null = null;
-  let failInitialSession = true;
-  const listeners = new Set<(value: AuthSession | null) => void>();
+  const notify = () => listeners.forEach((listener) => listener(current));
   return {
     getSession: async () => {
-      if (failInitialSession) throw new Error("stored session unavailable");
+      if (shouldFail) throw new Error("session network unavailable");
       return current;
     },
     onAuthStateChange: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    signIn: async () => {
-      failInitialSession = false;
-      current = { userId: "user-1" };
-      listeners.forEach((listener) => listener(current));
+    enroll: async () => {
+      shouldFail = false;
+      current = { userId: "owner-1" };
+      notify();
+      return current;
     },
-    signOut: async () => {
+    clearDeviceCredential: async () => {
       current = null;
-      listeners.forEach((listener) => listener(current));
+      notify();
     },
   };
 }
 
-describe("private authentication", () => {
-  it("does not expose public registration", () => {
-    render(<LoginForm auth={fakeAuth(null)} />);
-    expect(screen.queryByText(/注册|sign up/i)).not.toBeInTheDocument();
-  });
+function testPlatform(): PlatformPort {
+  const values = new Map<string, string>();
+  return {
+    mode: "desktop",
+    devicePlatform: "macos",
+    deviceId: "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725",
+    today: () => "2026-08-06",
+    openExternal: async () => undefined,
+    sessionStorage: {
+      get: (key) => values.get(key) ?? null,
+      set: (key, value) => { values.set(key, value); },
+      remove: (key) => { values.delete(key); },
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+      removeItem: (key) => { values.delete(key); },
+    },
+  };
+}
 
-  it("shows the app only after an authenticated session exists", async () => {
-    render(<AuthGate auth={fakeAuth({ userId: "user-1" })}><div>private</div></AuthGate>);
-    expect(await screen.findByText("private")).toBeInTheDocument();
+function renderEnrollmentGate(auth: PasswordlessAuthPort, enrollmentCode = "") {
+  return render(
+    <PlatformProvider value={testPlatform()}>
+      <AuthGate auth={auth} apiUrl="https://api.example" enrollmentCode={enrollmentCode}>
+        <p>主界面</p>
+      </AuthGate>
+    </PlatformProvider>,
+  );
+}
+
+describe("passwordless authentication gate", () => {
+  it("opens the app directly when an enrolled device token has a valid session", async () => {
+    render(<AuthGate auth={fakeAuth({ userId: "owner-1" })}>{() => <p>主界面</p>}</AuthGate>);
+
+    expect(await screen.findByText("主界面")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/密码|邮箱|登录/)).not.toBeInTheDocument();
   });
 
   it("exposes the authenticated owner identity to private app content", async () => {
@@ -70,14 +79,28 @@ describe("private authentication", () => {
     expect(await screen.findByText("owner:owner-2")).toBeInTheDocument();
   });
 
-  it("keeps login available when stored session verification fails", async () => {
+  it("shows device registration instead of account login when no credential exists", async () => {
+    renderEnrollmentGate(fakeAuth(null));
+
+    expect(await screen.findByRole("heading", { name: "登记此设备" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "登记设备" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/密码|邮箱|登录/)).not.toBeInTheDocument();
+  });
+
+  it("uses the same neutral registration screen when session verification has a network error", async () => {
+    renderEnrollmentGate(fakeAuth(null, true));
+
+    expect(await screen.findByRole("heading", { name: "登记此设备" })).toBeInTheDocument();
+    expect(screen.getByText(/短时登记码/)).toBeInTheDocument();
+    expect(screen.queryByText(/网络|登录失败|密码/)).not.toBeInTheDocument();
+  });
+
+  it("enters the app after one-time device enrollment", async () => {
     const user = userEvent.setup();
-    render(<AuthGate auth={flakyAuth()}><div>private</div></AuthGate>);
-    expect(await screen.findByRole("alert")).toHaveTextContent("无法验证登录状态");
-    expect(screen.getByRole("heading", { name: "登录 FlowContext" })).toBeInTheDocument();
-    await user.type(screen.getByLabelText("邮箱"), "flowcontext@example.test");
-    await user.type(screen.getByLabelText("密码"), "test-password");
-    await user.click(screen.getByRole("button", { name: "登录" }));
-    expect(await screen.findByText("private")).toBeInTheDocument();
+    renderEnrollmentGate(fakeAuth(null), "single-use");
+
+    await user.click(await screen.findByRole("button", { name: "登记设备" }));
+
+    expect(await screen.findByText("主界面")).toBeInTheDocument();
   });
 });
