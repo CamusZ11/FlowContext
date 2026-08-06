@@ -82,7 +82,7 @@ git commit -m "feat(api): add self-hosted service foundation"
 - Create: `apps/api/src/errors.ts`
 - Create: `apps/api/test/auth.test.ts`
 - Create: `apps/api/test/enrollment.test.ts`
-- Modify: `apps/api/migrations/001_core.sql`
+- Create: `apps/api/migrations/002_api_constraints.sql`
 - Modify: `apps/api/src/server.ts`
 **Interfaces:**
 - Produces `hashSecret(value: string): string` using `crypto.createHash("sha256")`.
@@ -150,7 +150,7 @@ it("returns 404 rather than 422 when PATCH targets an unknown todo", async () =>
 Run: `DATABASE_URL=postgresql://flowcontext_test:flowcontext_test@127.0.0.1:55432/flowcontext_test pnpm --filter @flowcontext/api test -- repository.integration.test.ts router.test.ts sse.test.ts`
 Expected: FAIL because no repository or routes exist. Start the disposable database only with `docker compose -f apps/api/test/docker-compose.yml up -d`.
 **Step 3: Implement parameterized repository queries and transactions.**
-Every query includes `owner_id = $n`; never interpolate user input. Use `BEGIN/COMMIT/ROLLBACK` for enrollment consumption, Handoff+Topic update and To-do rollover. Move the existing SQL constraints and Handoff idempotency behavior into migrations/repository tests. Route validations must check ISO dates, IANA timezone identifiers, UUIDs, pagination bounds and JSON body types before querying.
+Every query includes `owner_id = $n`; never interpolate user input. Use `BEGIN/COMMIT/ROLLBACK` for enrollment consumption, Handoff+Topic update and To-do rollover. Add `002_api_constraints.sql` for API-specific constraints/functions/notifications; never modify an applied `001_core.sql`. Route validations must check ISO dates, IANA timezone identifiers, UUIDs, pagination bounds and JSON body types before querying.
 **Step 4: Implement SSE with notification and recovery semantics.**
 After a committed To-do create/update/delete/rollover, publish the owner/date event through PostgreSQL `NOTIFY`. `GET /v1/todos/stream?date=YYYY-MM-DD` authenticates first, writes valid `text/event-stream` frames, sends periodic comments, and closes listeners on disconnect. A reconnecting client always refetches `GET /v1/todos` before accepting later events.
 **Step 5: Verify GREEN.**
