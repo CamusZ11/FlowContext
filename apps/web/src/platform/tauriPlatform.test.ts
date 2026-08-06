@@ -128,12 +128,13 @@ describe("Tauri platform", () => {
     expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBe("persistent-session");
   });
 
-  it("surfaces native credential deletion failure instead of pretending it was cleared", async () => {
+  it("persists deletion intent so a failed native delete cannot resurrect the token after restart", async () => {
     const values = new Map([
       ["device-id", "device-mac-1"],
       ["flowcontext.device-token", "persistent-session"],
     ]);
     let failRemove = true;
+    let removeCalls = 0;
     const invoke: TauriInvoke = async (command, args) => {
       const key = String(args?.key ?? "");
       if (command === "secure_storage_get") return values.get(key) ?? null;
@@ -142,6 +143,7 @@ describe("Tauri platform", () => {
         return null;
       }
       if (command === "secure_storage_remove") {
+        removeCalls += 1;
         if (failRemove) throw new Error("keychain delete failed");
         values.delete(key);
       }
@@ -152,9 +154,14 @@ describe("Tauri platform", () => {
     await expect(firstLaunch.sessionStorage.remove("flowcontext.device-token"))
       .rejects.toThrow("keychain delete failed");
 
-    failRemove = false;
     const restartedLaunch = await createTauriPlatform({ invoke });
-    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBe("persistent-session");
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBeNull();
+    expect(removeCalls).toBe(2);
+
+    failRemove = false;
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBeNull();
+    expect(values.has("flowcontext.device-token")).toBe(false);
+    expect(removeCalls).toBe(3);
   });
 
   it("also deletes the process-memory copy after native credential deletion succeeds", async () => {

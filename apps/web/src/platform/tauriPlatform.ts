@@ -59,6 +59,9 @@ function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+const DEVICE_TOKEN_KEY = "flowcontext.device-token";
+const DEVICE_TOKEN_DELETE_TOMBSTONE = "__flowcontext_device_token_delete_pending_v1__";
+
 function createMemorySessionStorage(): SessionStoragePort {
   const values = new Map<string, string>();
   const get = (key: string) => values.get(key) ?? null;
@@ -80,20 +83,25 @@ export function createTauriSessionStorage(
   invoke: TauriInvoke,
   fallbackStorage: SessionStoragePort = createFallbackSessionStorage(),
 ): SessionStoragePort {
-  const useNativeOrFallback = async <T>(
-    nativeOperation: () => Promise<T>,
-    fallbackOperation: () => T | Promise<T>,
-  ): Promise<T> => {
+  const get = async (key: string): Promise<string | null> => {
     try {
-      return await nativeOperation();
+      const nativeValue = asString(await invoke("secure_storage_get", { key }));
+      if (key !== DEVICE_TOKEN_KEY || nativeValue !== DEVICE_TOKEN_DELETE_TOMBSTONE) {
+        return nativeValue;
+      }
+      const fallbackValue = await fallbackStorage.get(key);
+      if (fallbackValue) return fallbackValue;
+      try {
+        await invoke("secure_storage_remove", { key });
+      } catch {
+        // Keep the protected tombstone so the next launch retries cleanup.
+      }
+      await fallbackStorage.remove(key);
+      return null;
     } catch {
-      return await fallbackOperation();
+      return await fallbackStorage.get(key);
     }
   };
-  const get = (key: string) => useNativeOrFallback(
-    async () => asString(await invoke("secure_storage_get", { key })),
-    () => fallbackStorage.get(key),
-  );
   const set = async (key: string, value: string) => {
     try {
       await invoke("secure_storage_set", { key, value });
@@ -104,6 +112,23 @@ export function createTauriSessionStorage(
     await fallbackStorage.remove(key);
   };
   const remove = async (key: string) => {
+    if (key === DEVICE_TOKEN_KEY) {
+      try {
+        await invoke("secure_storage_set", { key, value: DEVICE_TOKEN_DELETE_TOMBSTONE });
+      } catch (tombstoneReason: unknown) {
+        try {
+          await invoke("secure_storage_remove", { key });
+        } catch {
+          await fallbackStorage.remove(key);
+          throw tombstoneReason;
+        }
+        await fallbackStorage.remove(key);
+        return;
+      }
+      await fallbackStorage.remove(key);
+      await invoke("secure_storage_remove", { key });
+      return;
+    }
     try {
       await invoke("secure_storage_remove", { key });
     } catch (reason: unknown) {
