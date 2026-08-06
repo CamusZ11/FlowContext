@@ -81,7 +81,7 @@ export const sessionSchema = z
     topicCardId: idSchema,
     codexThreadId: idSchema,
     deviceId: idSchema,
-    platform: z.enum(["macos", "windows"]),
+    platform: z.enum(["macos", "windows"]).nullable(),
     workspacePath: nonEmptyTextSchema,
     startedAt: dateTimeSchema,
     endedAt: dateTimeSchema.nullable().optional(),

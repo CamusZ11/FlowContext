@@ -89,7 +89,7 @@ describe("FlowContext invariants", () => {
     ).toBe(true);
   });
 
-  it("requires a Session to preserve its device platform", () => {
+  it("preserves captured and legacy-null Session platforms", () => {
     const session = {
       id: "session-1",
       topicCardId: "topic-1",
@@ -100,6 +100,7 @@ describe("FlowContext invariants", () => {
     };
 
     expect(sessionSchema.safeParse({ ...session, platform: "windows" }).success).toBe(true);
+    expect(sessionSchema.parse({ ...session, platform: null }).platform).toBeNull();
     expect(sessionSchema.safeParse(session).success).toBe(false);
     expect(sessionSchema.safeParse({ ...session, platform: "linux" }).success).toBe(false);
   });

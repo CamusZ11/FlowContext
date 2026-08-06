@@ -63,6 +63,19 @@ pub struct SessionStart {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SessionRecord {
+    pub id: String,
+    pub topic_card_id: String,
+    pub codex_thread_id: String,
+    pub device_id: String,
+    pub platform: Option<String>,
+    pub workspace_path: String,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectionSnapshot {
     pub schema_version: u8,
     pub date: String,
@@ -136,7 +149,7 @@ impl FlowContextClient {
             .await
     }
 
-    pub async fn start_session(&self, input: &SessionStart) -> Result<CreatedRecord> {
+    pub async fn start_session(&self, input: &SessionStart) -> Result<SessionRecord> {
         self.request(Method::POST, "/v1/sessions", Some(input))
             .await
     }

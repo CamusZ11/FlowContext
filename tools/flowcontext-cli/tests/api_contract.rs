@@ -8,7 +8,7 @@ use wiremock::matchers::{body_json, header_exists, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
-async fn session_start_preserves_the_device_platform() {
+async fn session_start_preserves_the_request_platform_and_nullable_response() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/sessions"))
@@ -20,7 +20,16 @@ async fn session_start_preserves_the_device_platform() {
             "workspacePath": "F:/FlowContext",
             "startedAt": "2026-08-06T00:00:00Z"
         })))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "s1" })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "id": "s1",
+            "topicCardId": "t1",
+            "codexThreadId": "thread-1",
+            "deviceId": "device-1",
+            "platform": null,
+            "workspacePath": "F:/FlowContext",
+            "startedAt": "2026-08-06T00:00:00Z",
+            "endedAt": null
+        })))
         .mount(&server)
         .await;
     let client = FlowContextClient::with_http(
@@ -43,6 +52,7 @@ async fn session_start_preserves_the_device_platform() {
         .unwrap();
 
     assert_eq!(result.id, "s1");
+    assert_eq!(result.platform, None);
 }
 
 #[tokio::test]

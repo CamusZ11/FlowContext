@@ -66,7 +66,14 @@ function nullableString(row: Row, field: string): string | null {
 }
 
 function platformValue(row: Row, field = "platform"): DevicePlatform {
+  const value = nullablePlatformValue(row, field);
+  if (value === null) throw new ApiError(500, "mapping_error");
+  return value;
+}
+
+function nullablePlatformValue(row: Row, field = "platform"): DevicePlatform | null {
   const value = row[field];
+  if (value === null) return null;
   if (value !== "macos" && value !== "windows") throw new ApiError(500, "mapping_error");
   return value;
 }
@@ -125,7 +132,7 @@ function mapSession(row: Row): Session {
     topicCardId: stringValue(row, "topic_card_id"),
     codexThreadId: stringValue(row, "codex_thread_id"),
     deviceId: stringValue(row, "device_id"),
-    platform: platformValue(row),
+    platform: nullablePlatformValue(row),
     workspacePath: stringValue(row, "workspace_path"),
     startedAt: dateTimeValue(row, "started_at"),
     endedAt: row.ended_at === null || row.ended_at === undefined ? null : dateTimeValue(row, "ended_at"),
@@ -450,6 +457,8 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
         await client.query("rollback");
         return null;
       }
+      const sessionPlatform = nullablePlatformValue(session);
+      if (sessionPlatform === null) throw new ApiError(422, "invalid_request");
       const inserted = await queryOne(
         client,
         `insert into handoffs (owner_id, session_id, topic_card_id, content, idempotency_key)
@@ -477,7 +486,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
          set platform = excluded.platform,
              workspace_path = excluded.workspace_path,
              updated_at = now()`,
-        [principal.ownerId, stringValue(session, "device_id"), platformValue(session), stringValue(session, "project_id"), stringValue(session, "workspace_path")],
+        [principal.ownerId, stringValue(session, "device_id"), sessionPlatform, stringValue(session, "project_id"), stringValue(session, "workspace_path")],
       );
       await client.query("commit");
       return { record: mapHandoff(inserted), created: true };

@@ -59,7 +59,7 @@ const sourceRows = {
     topic_card_id: topicId,
     codex_thread_id: "thread-task-6",
     device_id: "test-device",
-    platform: "macos",
+    platform: null,
     workspace_path: "/workspace/FlowContext",
     started_at: "2026-08-06T00:00:00.000Z",
     ended_at: null,
@@ -263,6 +263,16 @@ describe("verifyImport", () => {
       rows.sessions[0]!.platform = "windows";
     });
     await expect(verifyImport(fixtureDirectory, pool)).rejects.toThrow("session_sample_mismatch");
+  });
+
+  it("exports, imports and verifies a legacy null Session platform without coercion", async () => {
+    const output = join(fixtureDirectory, "legacy-null-export");
+    await exportBusinessData(output, new ExportFixturePool(sourceRows));
+    const target = new ImportFixturePool(emptyRows());
+
+    await importBusinessData(output, target);
+    expect(target.client.rows.sessions[0]?.platform).toBeNull();
+    await expect(verifyImport(output, new FixtureTargetPool(target.client.rows))).resolves.toBeUndefined();
   });
 
   it("rejects a changed Daily Projection sample", async () => {

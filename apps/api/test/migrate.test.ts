@@ -67,15 +67,16 @@ function asPool(pool: RecordingPool): Pool {
 }
 
 describe("runMigrations", () => {
-  it("applies a forward migration that makes Session platform durable", async () => {
+  it("applies forward Session platform migrations including the legacy-null repair", async () => {
     const pool = new RecordingPool();
     const directory = resolve(import.meta.dirname, "../migrations");
 
     const applied = await runMigrations(asPool(pool), directory);
 
     expect(applied).toContain("003_session_platform.sql");
-    const platformMigration = pool.statements.find(({ sql }) => sql.includes("alter table sessions") && sql.includes("platform"));
-    expect(platformMigration?.sql).toMatch(/platform[\s\S]+(?:macos|windows)/);
+    expect(applied).toContain("004_session_platform_nullable.sql");
+    const nullableRepair = pool.statements.find(({ sql }) => sql.includes("alter column platform drop not null"));
+    expect(nullableRepair?.sql).toContain("alter table sessions");
   });
 
   it("applies new migrations in filename order under one transaction advisory lock", async () => {

@@ -265,6 +265,39 @@ describe("HttpFlowRepository", () => {
     expect(String(fetchImpl.mock.calls[1]?.[0])).toContain("deviceId=mac%2Fdevice+%E4%B8%80%26%E4%BA%8C");
   });
 
+  it("preserves a legacy null Session platform from Topic Context", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      topic: {
+        id: "topic-legacy",
+        projectId: "project-1",
+        title: "Legacy",
+        state: "open",
+        currentState: "",
+        nextAction: "",
+        openQuestions: [],
+        latestHandoffId: null,
+        lastActiveAt: "2026-08-05T00:00:00.000Z",
+      },
+      latestSession: {
+        id: "session-legacy",
+        topicCardId: "topic-legacy",
+        codexThreadId: "thread-legacy",
+        deviceId: "device-legacy",
+        platform: null,
+        workspacePath: "/legacy/workspace",
+        startedAt: "2026-08-05T00:00:00.000Z",
+        endedAt: null,
+      },
+      latestHandoff: null,
+      currentWorkspace: null,
+    }));
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
+
+    await expect(repo.getTopicContext("topic-legacy")).resolves.toMatchObject({
+      latestSession: { platform: null },
+    });
+  });
+
   it("rejects invalid response dates and non-HH:mm times without truncating", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse([{ ...todo, plannedDate: "2026-02-30" }]))

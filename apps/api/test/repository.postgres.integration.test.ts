@@ -31,7 +31,12 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
     await pool.query("drop schema public cascade");
     await pool.query("create schema public");
     const migrations = fileURLToPath(new URL("../migrations", import.meta.url));
-    await expect(runMigrations(pool, migrations)).resolves.toEqual(["001_core.sql", "002_api_constraints.sql"]);
+    await expect(runMigrations(pool, migrations)).resolves.toEqual([
+      "001_core.sql",
+      "002_api_constraints.sql",
+      "003_session_platform.sql",
+      "004_session_platform_nullable.sql",
+    ]);
     repository = new PostgresFlowRepository(pool);
   });
 
@@ -141,6 +146,39 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
       [owner.ownerId, "rollback-real-postgres"],
     );
     expect(persisted.rowCount).toBe(0);
+  });
+
+  it("preserves a legacy null Session and rejects its Handoff atomically", async () => {
+    await seedProject();
+    const topic = await repository.createTopic(owner, { projectId, title: "Legacy Topic" });
+    expect(topic).not.toBeNull();
+    const inserted = await pool.query(
+      `insert into sessions (owner_id, topic_card_id, codex_thread_id, device_id, platform, workspace_path)
+       values ($1, $2, $3, $4, null, $5)
+       returning id`,
+      [owner.ownerId, topic!.id, "legacy-null-thread", owner.deviceId, "/legacy/workspace"],
+    );
+    const sessionId = String(inserted.rows[0]?.id);
+
+    await expect(repository.getTopicContext(owner, topic!.id)).resolves.toMatchObject({
+      latestSession: { id: sessionId, platform: null },
+    });
+    await expect(repository.createHandoff(owner, {
+      sessionId,
+      topicCardId: topic!.id,
+      content: "must not persist",
+      idempotencyKey: "legacy-null-real-postgres",
+      topicUpdate: { nextAction: "must not update" },
+    })).rejects.toMatchObject({ statusCode: 422, code: "invalid_request" });
+
+    const [handoffs, unchangedTopic, workspaces] = await Promise.all([
+      pool.query("select id from handoffs where owner_id = $1 and session_id = $2", [owner.ownerId, sessionId]),
+      pool.query("select latest_handoff_id, next_action from topic_cards where owner_id = $1 and id = $2", [owner.ownerId, topic!.id]),
+      pool.query("select id from device_workspaces where owner_id = $1 and device_id = $2", [owner.ownerId, owner.deviceId]),
+    ]);
+    expect(handoffs.rowCount).toBe(0);
+    expect(unchangedTopic.rows[0]).toMatchObject({ latest_handoff_id: null, next_action: "" });
+    expect(workspaces.rowCount).toBe(0);
   });
 
   it("delivers a real committed NOTIFY through LISTEN with typed payload", async () => {
