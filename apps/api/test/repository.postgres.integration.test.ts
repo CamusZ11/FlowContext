@@ -7,18 +7,9 @@ import { ApiError } from "../src/errors.ts";
 import { runMigrations } from "../src/migrate.ts";
 import { PostgresFlowRepository } from "../src/repository.ts";
 import { PostgresTodoEventSource, type TodoEvent } from "../src/sse.ts";
+import { createDisposablePool } from "./disposable-postgres.ts";
 
 const enabled = process.env.FLOWCONTEXT_RUN_POSTGRES_TESTS === "1";
-
-function disposableDatabaseUrl(): string {
-  const raw = process.env.DATABASE_URL;
-  if (!raw) throw new Error("DATABASE_URL is required for the disposable PostgreSQL test");
-  const url = new URL(raw);
-  if (!(["127.0.0.1", "localhost"].includes(url.hostname) && url.port === "55432" && url.pathname === "/flowcontext_test")) {
-    throw new Error("refusing non-disposable DATABASE_URL; expected localhost:55432/flowcontext_test");
-  }
-  return raw;
-}
 
 const owner: Principal = {
   ownerId: "00000000-0000-4000-8000-000000000001",
@@ -35,7 +26,7 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
   let repository: PostgresFlowRepository;
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: disposableDatabaseUrl() });
+    pool = createDisposablePool(process.env.DATABASE_URL);
     await pool.query("drop extension if exists pgcrypto cascade");
     await pool.query("drop schema public cascade");
     await pool.query("create schema public");
