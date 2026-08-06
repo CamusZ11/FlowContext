@@ -105,6 +105,40 @@ describe("POST /v1/devices/enroll", () => {
     ]);
   });
 
+  it("creates a pending enrollment with only the supplied code hash", async () => {
+    const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
+    const client = {
+      async query(sql: string, values?: readonly unknown[]) {
+        statements.push({ sql, values });
+        if (sql.startsWith("insert into device_enrollments")) {
+          return {
+            rowCount: 1,
+            rows: [{ id: "6c76f8f1-3e02-4d87-b648-2f2d66be2ec6", expires_at: "2026-08-06T00:15:00.000Z" }],
+          };
+        }
+        return { rowCount: 1, rows: [] };
+      },
+      release() {},
+    };
+    const repository = new PostgresAuthRepository({
+      async connect() { return client; },
+    });
+
+    await expect(repository.createEnrollment({
+      codeHash: "a".repeat(64),
+      expiresAt: "2026-08-06T00:15:00.000Z",
+    })).resolves.toEqual({
+      id: "6c76f8f1-3e02-4d87-b648-2f2d66be2ec6",
+      expiresAt: "2026-08-06T00:15:00.000Z",
+    });
+
+    expect(statements.map(({ sql }) => sql)).toEqual(expect.arrayContaining(["begin", "commit"]));
+    expect(statements.find(({ sql }) => sql.startsWith("insert into device_enrollments"))?.values).toEqual([
+      "a".repeat(64),
+      "2026-08-06T00:15:00.000Z",
+    ]);
+  });
+
   it("does not log the supplied enrollment code or issued device token", async () => {
     const repository = new EnrollmentRepository();
     const enrollmentCode = randomBytes(24).toString("base64url");

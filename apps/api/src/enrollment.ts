@@ -26,6 +26,11 @@ export interface AuthRepository {
 
 export interface DeviceManagementRepository {
   revokeDevice(deviceId: string): Promise<boolean>;
+  revokeActiveDeviceTokens(deviceId: string): Promise<number>;
+}
+
+export interface EnrollmentManagementRepository {
+  createEnrollment(input: { codeHash: string; expiresAt: string }): Promise<{ id: string; expiresAt: string }>;
 }
 
 type QueryResult<Row> = { rows: Row[]; rowCount: number | null };
@@ -45,7 +50,7 @@ export async function revokeDevice(repository: DeviceManagementRepository, devic
   return repository.revokeDevice(deviceId);
 }
 
-export class PostgresAuthRepository implements AuthRepository, DeviceManagementRepository {
+export class PostgresAuthRepository implements AuthRepository, DeviceManagementRepository, EnrollmentManagementRepository {
   constructor(private readonly pool: EnrollmentPool) {}
 
   async findEnrollment(codeHash: string): Promise<EnrollmentRecord | null> {
@@ -96,6 +101,26 @@ export class PostgresAuthRepository implements AuthRepository, DeviceManagementR
     }
   }
 
+  async createEnrollment(input: { codeHash: string; expiresAt: string }): Promise<{ id: string; expiresAt: string }> {
+    const client = await this.pool.connect() as unknown as EnrollmentClient;
+    try {
+      await client.query("begin");
+      const result = await client.query<{ id: string; expires_at: string }>(
+        "insert into device_enrollments (code_hash, expires_at) values ($1, $2) returning id, expires_at",
+        [input.codeHash, input.expiresAt],
+      );
+      const enrollment = result.rows[0];
+      if (!enrollment) throw new Error("enrollment_creation_failed");
+      await client.query("commit");
+      return { id: enrollment.id, expiresAt: enrollment.expires_at };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async findActiveDeviceToken(tokenHash: string): Promise<DeviceTokenRecord | null> {
     const result = await this.pool.query<{
       owner_id: string;
@@ -114,10 +139,14 @@ export class PostgresAuthRepository implements AuthRepository, DeviceManagementR
   }
 
   async revokeDevice(deviceId: string): Promise<boolean> {
+    return (await this.revokeActiveDeviceTokens(deviceId)) > 0;
+  }
+
+  async revokeActiveDeviceTokens(deviceId: string): Promise<number> {
     const result = await this.pool.query(
       "update device_tokens set revoked_at = now() where device_id = $1 and revoked_at is null",
       [deviceId],
     );
-    return result.rowCount !== 0;
+    return result.rowCount ?? 0;
   }
 }
