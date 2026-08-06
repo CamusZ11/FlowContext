@@ -16,7 +16,7 @@
 - [ ] 托盘显示/隐藏/设置/退出可用。
 - [ ] `CommandOrControl+Shift+Space` 可在热区失效时显示/隐藏。
 - [ ] 点击 Codex 链接只打开 Codex Desktop，不自动发送 prompt。
-- [ ] Supabase 会话不出现在浏览器 `localStorage`。
+- [ ] 设备凭据不出现在浏览器 `localStorage`。
 
 ## Windows 实机
 

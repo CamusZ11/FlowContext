@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { getBootstrapErrorDetail } from "./bootstrapMessages";
 
 describe("bootstrap error messaging", () => {
-  it("does not label runtime failures as missing Supabase configuration", () => {
-    expect(getBootstrapErrorDetail("runtime", undefined)).not.toContain("Supabase");
+  it("does not label runtime failures as missing provider configuration", () => {
+    expect(getBootstrapErrorDetail("runtime", undefined)).toContain("本地存储");
   });
 
-  it("keeps provider configuration failures actionable", () => {
-    expect(getBootstrapErrorDetail("configuration", undefined)).toContain("Supabase");
+  it("points every production configuration failure to the self-hosted API", () => {
+    expect(getBootstrapErrorDetail("configuration", undefined)).toContain("API URL");
     expect(getBootstrapErrorDetail("configuration", "self-hosted")).toContain("API URL");
   });
 });

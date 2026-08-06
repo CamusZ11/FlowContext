@@ -29,7 +29,7 @@ interface AppAuthStorage {
   remove(key: string): Awaitable<void>;
 }
 
-interface SupabaseCompatibleAuthStorage {
+interface BrowserCompatibleAuthStorage {
   getItem(key: string): Awaitable<string | null>;
   setItem(key: string, value: string): Awaitable<void>;
   removeItem(key: string): Awaitable<void>;
@@ -40,8 +40,8 @@ interface SupabaseCompatibleAuthStorage {
  * optional so callers do not have to manufacture duplicate methods.
  */
 export type HttpAuthStorage =
-  | (AppAuthStorage & Partial<SupabaseCompatibleAuthStorage>)
-  | (SupabaseCompatibleAuthStorage & Partial<AppAuthStorage>);
+  | (AppAuthStorage & Partial<BrowserCompatibleAuthStorage>)
+  | (BrowserCompatibleAuthStorage & Partial<AppAuthStorage>);
 
 export interface HttpAuthFetchOptions {
   baseUrl: string;

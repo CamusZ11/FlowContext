@@ -12,7 +12,7 @@ describe("browser session storage", () => {
     expect(window.localStorage.getItem("flowcontext-dev-test:flowcontext.device-token")).toBeNull();
   });
 
-  it("namespaces both app and Supabase-compatible accessors", () => {
+  it("namespaces both app and browser-compatible accessors", () => {
     const values = new Map<string, string>();
     const backing = {
       getItem: (key: string) => values.get(key) ?? null,

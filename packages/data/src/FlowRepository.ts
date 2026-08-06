@@ -24,8 +24,8 @@ export interface FlowRepositoryCapabilities {
 }
 
 /**
- * Stable frontend data port. Supabase and any replacement backend stay behind
- * this interface; UI code only sees domain values.
+ * Stable frontend data port. Backend transports stay behind this interface;
+ * UI code only sees domain values.
  */
 export interface FlowRepository {
   readonly capabilities: FlowRepositoryCapabilities;

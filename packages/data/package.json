@@ -16,8 +16,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@flowcontext/domain": "workspace:*",
-    "@supabase/supabase-js": "2.111.0"
+    "@flowcontext/domain": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3",

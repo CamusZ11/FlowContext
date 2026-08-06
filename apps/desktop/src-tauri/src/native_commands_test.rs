@@ -24,8 +24,8 @@ fn rejects_non_codex_and_incomplete_deep_links() {
 fn secure_storage_keys_are_namespaced_and_bounded() {
     assert_eq!(secure_storage_service(), "com.camus.flowcontext.auth.v2");
     assert_eq!(
-        secure_storage_key("supabase.session").unwrap(),
-        "flowcontext:supabase.session"
+        secure_storage_key("legacy.session").unwrap(),
+        "flowcontext:legacy.session"
     );
     assert!(secure_storage_key("").is_err());
     assert!(secure_storage_key("bad\nkey").is_err());

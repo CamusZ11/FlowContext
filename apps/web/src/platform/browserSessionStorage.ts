@@ -6,7 +6,7 @@ export interface StringStorageLike {
   removeItem(key: string): void;
 }
 
-export interface SupabaseStorageLike {
+export interface BrowserStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
@@ -17,7 +17,7 @@ export function createBrowserSessionStorage(
   // with the tab. Production desktop builds use native secure storage.
   storage: StringStorageLike | undefined = typeof window === "undefined" ? undefined : window.sessionStorage,
   namespace = "flowcontext",
-): SessionStoragePort & SupabaseStorageLike {
+): SessionStoragePort & BrowserStorageLike {
   const availableStorage = isStringStorageLike(storage) ? storage : undefined;
   const prefix = `${namespace}:`;
   const adapter = {

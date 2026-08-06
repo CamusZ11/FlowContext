@@ -14,7 +14,6 @@
   "dependencies": {
     "@flowcontext/data": "workspace:*",
     "@flowcontext/domain": "workspace:*",
-    "@supabase/supabase-js": "2.111.0",
     "@tanstack/react-query": "5.83.0",
     "@tauri-apps/api": "^2.11.1",
     "react": "19.1.1",
