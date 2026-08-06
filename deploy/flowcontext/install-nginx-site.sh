@@ -14,7 +14,13 @@ rollback() {
   [ "$available_created" -eq 0 ] || rm -f "$available"
 }
 
-trap 'rollback' EXIT HUP INT TERM
+abort() {
+  rollback
+  exit 1
+}
+
+trap 'rollback' EXIT
+trap 'abort' HUP INT TERM
 
 fail() {
   printf '%s\n' "Nginx site install failed: $1" >&2
@@ -32,8 +38,8 @@ case "$1" in
   *) fail "usage: $0 --http-only|--enable-tls" ;;
 esac
 [ -f "$source" ] || fail "source template is missing"
-[ ! -e "$available" ] || fail "refusing to replace an existing Nginx site: $available"
-[ ! -e "$enabled" ] || fail "refusing to replace an existing Nginx site link: $enabled"
+[ ! -e "$available" ] && [ ! -L "$available" ] || fail "refusing to replace an existing Nginx site: $available"
+[ ! -e "$enabled" ] && [ ! -L "$enabled" ] || fail "refusing to replace an existing Nginx site link: $enabled"
 
 install -m 0644 "$source" "$available"
 available_created=1

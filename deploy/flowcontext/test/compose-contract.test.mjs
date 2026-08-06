@@ -131,12 +131,16 @@ test("Nginx template is limited to the approved host and loopback proxy", async 
   assert.match(installer, /nginx -t/);
   assert.match(installer, /sites-available/);
   assert.match(installer, /sites-enabled/);
-  assert.match(installer, /trap 'rollback' EXIT HUP INT TERM/);
+  assert.match(installer, /trap 'rollback' EXIT/);
   assert.match(installer, /nginx -s reload \|\| fail/);
   assert.match(installer, /enabled_created=1/);
   assert.match(installer, /available_created=1/);
   assert.match(installer, /\[ "\$enabled_created" -eq 0 \] \|\| rm -f "\$enabled"/);
   assert.match(installer, /\[ "\$available_created" -eq 0 \] \|\| rm -f "\$available"/);
+  assert.match(installer, /\[ ! -e "\$available" \] && \[ ! -L "\$available" \]/);
+  assert.match(installer, /\[ ! -e "\$enabled" \] && \[ ! -L "\$enabled" \]/);
+  assert.match(installer, /trap 'abort' HUP INT TERM/);
+  assert.match(installer, /abort\(\) \{[\s\S]*rollback[\s\S]*exit 1/);
 });
 
 test("Nginx installer removes only its own available file when link creation fails", async (t) => {
@@ -156,7 +160,7 @@ test("Nginx installer removes only its own available file when link creation fai
       "-v", `${fakeBin}:/fake:ro`,
       "alpine:3.20",
       "sh", "-c",
-      "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled; PATH=/fake:$PATH /work/install-nginx-site.sh --http-only; status=$?; if [ ! -e /etc/nginx/sites-available/flowcontext.zkabi.cn ] && [ ! -e /etc/nginx/sites-enabled/flowcontext.zkabi.cn ]; then echo rolled-back; fi; exit $status",
+      "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled; PATH=/fake:$PATH /work/install-nginx-site.sh --http-only; status=$?; if [ ! -e /etc/nginx/sites-available/flowcontext.zkabi.cn ] && [ ! -L /etc/nginx/sites-available/flowcontext.zkabi.cn ] && [ ! -e /etc/nginx/sites-enabled/flowcontext.zkabi.cn ] && [ ! -L /etc/nginx/sites-enabled/flowcontext.zkabi.cn ]; then echo rolled-back; fi; exit $status",
     ], { encoding: "utf8" });
 
     assert.notEqual(result.status, 0);
@@ -164,6 +168,25 @@ test("Nginx installer removes only its own available file when link creation fai
   } finally {
     await rm(fakeBin, { recursive: true, force: true });
   }
+});
+
+test("Nginx installer refuses and preserves an existing dangling site symlink", async (t) => {
+  if (spawnSync("docker", ["version"], { stdio: "ignore" }).status !== 0) {
+    t.skip("Docker is required for the installer behavior test");
+    return;
+  }
+  const deployRoot = new URL("..", import.meta.url).pathname;
+  const result = spawnSync("docker", [
+    "run", "--rm",
+    "-v", `${deployRoot}:/work:ro`,
+    "alpine:3.20",
+    "sh", "-c",
+    "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled; ln -s /missing /etc/nginx/sites-available/flowcontext.zkabi.cn; PATH=/nonexistent:$PATH /work/install-nginx-site.sh --http-only; status=$?; if [ -L /etc/nginx/sites-available/flowcontext.zkabi.cn ] && [ \"$(readlink /etc/nginx/sites-available/flowcontext.zkabi.cn)\" = /missing ]; then echo preserved-dangling-link; fi; exit $status",
+  ], { encoding: "utf8" });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /refusing to replace an existing Nginx site/);
+  assert.match(result.stdout, /preserved-dangling-link/);
 });
 
 test("strict environment loader accepts only the complete literal whitelist", async () => {
