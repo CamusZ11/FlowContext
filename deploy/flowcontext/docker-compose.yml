@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: flowcontext
+      POSTGRES_USER: flowcontext
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - flowcontext_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowcontext -d flowcontext"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/flowcontext/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgresql://flowcontext:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/flowcontext
+      FLOWCONTEXT_OWNER_ID: ${FLOWCONTEXT_OWNER_ID:?FLOWCONTEXT_OWNER_ID is required}
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - flowcontext_internal
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    command: ["sh", "-ec", "pnpm --filter @flowcontext/api migrate && pnpm --filter @flowcontext/api start"]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      FLOWCONTEXT_PUBLIC_URL: ${FLOWCONTEXT_PUBLIC_URL:?FLOWCONTEXT_PUBLIC_URL is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${FLOWCONTEXT_DATA_DIR:-/srv/flowcontext/data}/caddy-data:/data
+      - ${FLOWCONTEXT_DATA_DIR:-/srv/flowcontext/data}/caddy-config:/config
+    networks:
+      - flowcontext_internal
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  postgres_data:
+
+networks:
+  flowcontext_internal:
+    internal: true
