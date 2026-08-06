@@ -11,11 +11,9 @@ load_flowcontext_env() {
   POSTGRES_PASSWORD=
   FLOWCONTEXT_OWNER_ID=
   FLOWCONTEXT_PUBLIC_URL=
-  ACME_EMAIL=
   seen_postgres=0
   seen_owner=0
   seen_public=0
-  seen_acme=0
 
   while IFS= read -r line || [ -n "$line" ]; do
     [ -n "$line" ] || return 1
@@ -29,11 +27,10 @@ load_flowcontext_env() {
       POSTGRES_PASSWORD) [ "$seen_postgres" -eq 0 ] || return 1; POSTGRES_PASSWORD=$value; seen_postgres=1 ;;
       FLOWCONTEXT_OWNER_ID) [ "$seen_owner" -eq 0 ] || return 1; FLOWCONTEXT_OWNER_ID=$value; seen_owner=1 ;;
       FLOWCONTEXT_PUBLIC_URL) [ "$seen_public" -eq 0 ] || return 1; FLOWCONTEXT_PUBLIC_URL=$value; seen_public=1 ;;
-      ACME_EMAIL) [ "$seen_acme" -eq 0 ] || return 1; ACME_EMAIL=$value; seen_acme=1 ;;
       *) return 1 ;;
     esac
   done < "$1"
 
-  [ "$seen_postgres" -eq 1 ] && [ "$seen_owner" -eq 1 ] && [ "$seen_public" -eq 1 ] && [ "$seen_acme" -eq 1 ] || return 1
-  export POSTGRES_PASSWORD FLOWCONTEXT_OWNER_ID FLOWCONTEXT_PUBLIC_URL ACME_EMAIL
+  [ "$seen_postgres" -eq 1 ] && [ "$seen_owner" -eq 1 ] && [ "$seen_public" -eq 1 ] || return 1
+  export POSTGRES_PASSWORD FLOWCONTEXT_OWNER_ID FLOWCONTEXT_PUBLIC_URL
 }

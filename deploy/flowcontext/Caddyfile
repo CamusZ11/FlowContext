@@ -1,8 +1,3 @@
-http://{env.FLOWCONTEXT_PUBLIC_URL} {
-  redir https://{host}{uri} permanent
-}
-
-https://{env.FLOWCONTEXT_PUBLIC_URL} {
-  tls {env.ACME_EMAIL}
-  reverse_proxy api:8080
+:80 {
+	reverse_proxy api:8080
 }

@@ -23,22 +23,18 @@ load_flowcontext_env "$root_dir/.env" || fail ".env must contain each expected l
 [ -n "$POSTGRES_PASSWORD" ] || fail "POSTGRES_PASSWORD is required"
 [ -n "$FLOWCONTEXT_OWNER_ID" ] || fail "FLOWCONTEXT_OWNER_ID is required"
 [ -n "$FLOWCONTEXT_PUBLIC_URL" ] || fail "FLOWCONTEXT_PUBLIC_URL is required"
-[ -n "$ACME_EMAIL" ] || fail "ACME_EMAIL is required"
 
-case "$FLOWCONTEXT_PUBLIC_URL" in
-  *://*|*/*|*:*|*' '*) fail "FLOWCONTEXT_PUBLIC_URL must be a DNS hostname without a scheme or path" ;;
-esac
-printf '%s' "$FLOWCONTEXT_PUBLIC_URL" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$' \
-  || fail "FLOWCONTEXT_PUBLIC_URL must be a public DNS hostname"
-getent hosts "$FLOWCONTEXT_PUBLIC_URL" >/dev/null 2>&1 || fail "DNS must resolve before Caddy can obtain HTTPS certificates"
+[ "$FLOWCONTEXT_PUBLIC_URL" = "flowcontext.zkabi.cn" ] || fail "FLOWCONTEXT_PUBLIC_URL must be flowcontext.zkabi.cn"
+getent hosts "$FLOWCONTEXT_PUBLIC_URL" >/dev/null 2>&1 || fail "DNS must resolve before Nginx TLS can be provisioned"
 docker compose --env-file .env config >/dev/null || fail "docker compose configuration is invalid"
 
-mkdir -p "$data_dir/caddy-data" "$data_dir/caddy-config" || fail "data path is not writable"
-[ -w "$data_dir/caddy-data" ] && [ -w "$data_dir/caddy-config" ] || fail "data path is not writable"
+mkdir -p "$data_dir" || fail "data path is not writable"
+[ -w "$data_dir" ] || fail "data path is not writable"
 
-command -v ss >/dev/null 2>&1 || fail "ss is required to check public listener conflicts"
-if ss -ltnH '( sport = :80 or sport = :443 )' | grep -q '.'; then
-  fail "TCP 80 or 443 already has a listener"
+command -v nginx >/dev/null 2>&1 || fail "Nginx is required to own public TLS"
+command -v ss >/dev/null 2>&1 || fail "ss is required to check the internal listener"
+if ss -ltnH '( sport = :18080 )' | grep -q '.'; then
+  fail "127.0.0.1:18080 is already in use"
 fi
-printf '%s\n' "listener summary: ports 80/443 are free"
+printf '%s\n' "Nginx owns public TLS; FlowContext will use 127.0.0.1:18080"
 printf '%s\n' "preflight passed"

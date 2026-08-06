@@ -19,6 +19,7 @@ load_flowcontext_env "$root_dir/.env" || fail ".env must contain each expected l
 ./preflight.sh
 docker compose --env-file .env config >/dev/null
 docker compose --env-file .env up -d --build --wait --wait-timeout 120
+curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused "http://127.0.0.1:18080/healthz" >/dev/null
 curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused "https://$FLOWCONTEXT_PUBLIC_URL/healthz" >/dev/null
 docker compose ps
 printf 'deployed: https://%s\n' "$FLOWCONTEXT_PUBLIC_URL"

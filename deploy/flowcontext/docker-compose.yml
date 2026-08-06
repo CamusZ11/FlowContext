@@ -45,19 +45,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    environment:
-      FLOWCONTEXT_PUBLIC_URL: ${FLOWCONTEXT_PUBLIC_URL:?FLOWCONTEXT_PUBLIC_URL is required}
-      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
     ports:
-      - "80:80"
-      - "443:443"
+      - "127.0.0.1:18080:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ${FLOWCONTEXT_DATA_DIR:-/srv/flowcontext/data}/caddy-data:/data
-      - ${FLOWCONTEXT_DATA_DIR:-/srv/flowcontext/data}/caddy-config:/config
     networks:
       - flowcontext_internal
-      - flowcontext_edge
     healthcheck:
       test: ["CMD", "caddy", "version"]
       interval: 30s
@@ -70,4 +63,3 @@ volumes:
 networks:
   flowcontext_internal:
     internal: true
-  flowcontext_edge:

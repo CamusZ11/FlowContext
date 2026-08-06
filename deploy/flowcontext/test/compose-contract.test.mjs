@@ -13,18 +13,17 @@ const serviceBlock = (compose, service) => {
   return match[1];
 };
 
-test("compose keeps database and API private behind Caddy", async () => {
+test("compose keeps database and API private behind a loopback-only Caddy", async () => {
   const compose = await read("docker-compose.yml");
 
   assert.match(compose, /^\s*postgres:\s*$/m);
   assert.match(compose, /^\s*api:\s*$/m);
   assert.match(compose, /^\s*caddy:\s*$/m);
-  assert.match(compose, /caddy:[\s\S]*?ports:\s*\n\s*- "80:80"\s*\n\s*- "443:443"/);
+  assert.match(compose, /caddy:[\s\S]*?ports:\s*\n\s*- "127\.0\.0\.1:18080:80"/);
+  assert.doesNotMatch(compose, /(^|\n)\s*- "(?:0\.0\.0\.0:)?(?:80|443):/);
   assert.doesNotMatch(serviceBlock(compose, "postgres"), /^\s*ports:/m);
   assert.doesNotMatch(serviceBlock(compose, "api"), /^\s*ports:/m);
   assert.match(compose, /flowcontext_internal:\s*\n\s*internal: true/);
-  assert.match(compose, /flowcontext_edge:/);
-  assert.match(serviceBlock(compose, "caddy"), /- flowcontext_edge/);
   for (const service of ["postgres", "api"]) {
     const networkBlock = serviceBlock(compose, service);
     assert.match(networkBlock, /- flowcontext_internal/);
@@ -45,7 +44,7 @@ test("compose has persistent, healthy, restarting services without embedded secr
   const caddy = serviceBlock(compose, "caddy");
   assert.doesNotMatch(caddy, /env_file:/);
   assert.doesNotMatch(caddy, /POSTGRES_PASSWORD/);
-  assert.match(caddy, /FLOWCONTEXT_PUBLIC_URL: \$\{FLOWCONTEXT_PUBLIC_URL/);
+  assert.doesNotMatch(caddy, /FLOWCONTEXT_PUBLIC_URL/);
 });
 
 test("operator environment contract contains names only and deployment files stay local", async () => {
@@ -55,13 +54,13 @@ test("operator environment contract contains names only and deployment files sta
     read("Caddyfile"),
   ]);
 
-  for (const key of ["POSTGRES_PASSWORD", "FLOWCONTEXT_OWNER_ID", "FLOWCONTEXT_PUBLIC_URL", "ACME_EMAIL"]) {
+  for (const key of ["POSTGRES_PASSWORD", "FLOWCONTEXT_OWNER_ID", "FLOWCONTEXT_PUBLIC_URL"]) {
     assert.match(example, new RegExp(`^${key}=$`, "m"));
   }
   assert.match(ignore, /^\.env$/m);
-  assert.match(caddy, /http:\/\/{env\.FLOWCONTEXT_PUBLIC_URL}/);
-  assert.match(caddy, /https:\/\/{env\.FLOWCONTEXT_PUBLIC_URL}/);
+  assert.match(caddy, /^:80 \{/m);
   assert.match(caddy, /reverse_proxy api:8080/);
+  assert.doesNotMatch(caddy, /tls\s|https:\/\//);
 });
 
 test("operator scripts validate device IDs and keep admin commands inside the private API", async () => {
@@ -79,9 +78,8 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(preflight, /stat/);
   assert.match(preflight, /0600/);
   assert.match(preflight, /docker compose --env-file \.env config/);
-  assert.match(preflight, /ss -ltn/);
-  assert.match(preflight, /ss -ltnH/);
-  assert.match(preflight, /TCP 80 or 443 already has a listener/);
+  assert.match(preflight, /nginx/);
+  assert.match(preflight, /127\.0\.0\.1:18080/);
   assert.match(preflight, /grep -q '\.'/);
   assert.match(deploy, /\[ -f "\$root_dir\/\.env" \]/);
   assert.match(deploy, /stat -c/);
@@ -93,7 +91,7 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   }
   assert.match(deploy, /docker compose --env-file \.env config/);
   assert.match(deploy, /docker compose --env-file \.env up -d --build --wait/);
-  assert.match(deploy, /curl .*https:\/\/\$FLOWCONTEXT_PUBLIC_URL\/healthz/);
+  assert.match(deploy, /curl .*http:\/\/127\.0\.0\.1:18080\/healthz/);
   assert.match(deploy, /printf 'deployed: https:\/\/%s/);
   for (const script of [enroll, revoke]) {
     assert.match(script, /UUID_PATTERN=/);
@@ -101,8 +99,28 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   }
   assert.match(enroll, /enrollment create --device-id "\$device_id"/);
   assert.match(revoke, /device revoke/);
-  assert.match(readme, /(域名\/DNS|domain\/DNS)/i);
+  assert.match(readme, /flowcontext\.zkabi\.cn/);
+  assert.match(readme, /Nginx/);
   assert.match(readme, /0600/);
+});
+
+test("Nginx template is limited to the approved host and loopback proxy", async () => {
+  const [site, installer] = await Promise.all([
+    read("nginx/flowcontext.zkabi.cn.conf"),
+    read("install-nginx-site.sh"),
+  ]);
+
+  assert.match(site, /server_name flowcontext\.zkabi\.cn;/);
+  assert.match(site, /proxy_pass http:\/\/127\.0\.0\.1:18080;/);
+  assert.match(site, /proxy_buffering off;/);
+  assert.match(site, /proxy_http_version 1\.1;/);
+  assert.match(site, /Upgrade \$http_upgrade/);
+  assert.match(site, /\.well-known\/acme-challenge/);
+  assert.doesNotMatch(site, /ssl_certificate(?:_key)?\s/);
+  assert.doesNotMatch(site, /server_name\s+(?!flowcontext\.zkabi\.cn;)/);
+  assert.match(installer, /nginx -t/);
+  assert.match(installer, /sites-available/);
+  assert.match(installer, /sites-enabled/);
 });
 
 test("strict environment loader accepts only the complete literal whitelist", async () => {
@@ -113,7 +131,6 @@ test("strict environment loader accepts only the complete literal whitelist", as
       "POSTGRES_PASSWORD=literal-value",
       "FLOWCONTEXT_OWNER_ID=00000000-0000-4000-8000-000000000000",
       "FLOWCONTEXT_PUBLIC_URL=flowcontext.example.com",
-      "ACME_EMAIL=operator@example.com",
     ].join("\n"));
     const helper = new URL("env.sh", root).pathname;
     const result = spawnSync("/bin/sh", ["-c", `. "${helper}"; load_flowcontext_env "$1"; printf '%s' "$FLOWCONTEXT_PUBLIC_URL"`, "--", envPath], { encoding: "utf8" });
@@ -134,7 +151,7 @@ test("strict environment loader rejects executable syntax, unknown, duplicate, a
       "POSTGRES_PASSWORD=`false`",
       "POSTGRES_PASSWORD=value\nPOSTGRES_PASSWORD=again",
       "UNEXPECTED=value",
-      "POSTGRES_PASSWORD=value\nFLOWCONTEXT_OWNER_ID=id\nFLOWCONTEXT_PUBLIC_URL=host.example.com",
+      "POSTGRES_PASSWORD=value\nFLOWCONTEXT_OWNER_ID=id",
     ]) {
       const envPath = join(directory, `${Math.random()}.env`);
       await writeFile(envPath, invalid);
@@ -173,7 +190,6 @@ test("strict environment loader rejects a NUL byte before line parsing", async (
       "POSTGRES_PASSWORD=literal\0value",
       "FLOWCONTEXT_OWNER_ID=00000000-0000-4000-8000-000000000000",
       "FLOWCONTEXT_PUBLIC_URL=flowcontext.example.com",
-      "ACME_EMAIL=operator@example.com",
     ].join("\n")));
     const result = spawnSync("/bin/sh", ["-c", `. "${helper}"; load_flowcontext_env "$1"`, "--", envPath], { encoding: "utf8" });
 
