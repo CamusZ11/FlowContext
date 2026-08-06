@@ -6,6 +6,14 @@ site_name=flowcontext.zkabi.cn
 available=/etc/nginx/sites-available/$site_name
 enabled=/etc/nginx/sites-enabled/$site_name
 cert_include=/etc/nginx/snippets/$site_name-certbot.conf
+installed=0
+
+rollback() {
+  [ "$installed" -eq 1 ] || return 0
+  rm -f "$enabled" "$available"
+}
+
+trap 'rollback' EXIT HUP INT TERM
 
 fail() {
   printf '%s\n' "Nginx site install failed: $1" >&2
@@ -28,9 +36,9 @@ esac
 
 install -m 0644 "$source" "$available"
 ln -s "$available" "$enabled"
-if ! nginx -t; then
-  rm -f "$enabled" "$available"
-  fail "Nginx validation failed; only the new site files were removed"
-fi
-nginx -s reload
+installed=1
+nginx -t || fail "Nginx validation failed; only the new site files were removed"
+nginx -s reload || fail "Nginx reload failed; only the new site files were removed"
+installed=0
+trap - EXIT HUP INT TERM
 printf '%s\n' "installed isolated Nginx site: $site_name"

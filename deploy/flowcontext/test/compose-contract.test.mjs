@@ -80,7 +80,6 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(preflight, /docker compose --env-file \.env config/);
   assert.match(preflight, /nginx/);
   assert.match(preflight, /127\.0\.0\.1:18080/);
-  assert.match(preflight, /grep -q '\.'/);
   assert.match(deploy, /\[ -f "\$root_dir\/\.env" \]/);
   assert.match(deploy, /stat -c/);
   assert.match(deploy, /FLOWCONTEXT_PUBLIC_URL is required/);
@@ -104,6 +103,17 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(readme, /0600/);
 });
 
+test("preflight permits only the already-running managed loopback Caddy", async () => {
+  const preflight = await read("preflight.sh");
+
+  assert.match(preflight, /docker compose --env-file \.env ps --status running --services/);
+  assert.match(preflight, /grep -Fx caddy/);
+  assert.match(preflight, /docker compose --env-file \.env port caddy 80/);
+  assert.match(preflight, /\[ "\$caddy_port" = "127\.0\.0\.1:18080" \]/);
+  assert.match(preflight, /\$4 != "127\.0\.0\.1:18080"/);
+  assert.match(preflight, /foreign or non-loopback listener/);
+});
+
 test("Nginx template is limited to the approved host and loopback proxy", async () => {
   const [site, installer] = await Promise.all([
     read("nginx/flowcontext.zkabi.cn.conf"),
@@ -121,6 +131,9 @@ test("Nginx template is limited to the approved host and loopback proxy", async 
   assert.match(installer, /nginx -t/);
   assert.match(installer, /sites-available/);
   assert.match(installer, /sites-enabled/);
+  assert.match(installer, /trap 'rollback' EXIT HUP INT TERM/);
+  assert.match(installer, /nginx -s reload \|\| fail/);
+  assert.match(installer, /rm -f "\$enabled" "\$available"/);
 });
 
 test("strict environment loader accepts only the complete literal whitelist", async () => {

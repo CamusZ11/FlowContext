@@ -33,8 +33,17 @@ mkdir -p "$data_dir" || fail "data path is not writable"
 
 command -v nginx >/dev/null 2>&1 || fail "Nginx is required to own public TLS"
 command -v ss >/dev/null 2>&1 || fail "ss is required to check the internal listener"
-if ss -ltnH '( sport = :18080 )' | grep -q '.'; then
-  fail "127.0.0.1:18080 is already in use"
+listeners=$(ss -ltnH '( sport = :18080 )')
+if [ -n "$listeners" ]; then
+  if ! printf '%s\n' "$listeners" | awk '$4 != "127.0.0.1:18080" { exit 1 } END { if (NR != 1) exit 1 }'; then
+    fail "127.0.0.1:18080 has a foreign or non-loopback listener"
+  fi
+  docker compose --env-file .env ps --status running --services | grep -Fx caddy >/dev/null \
+    || fail "127.0.0.1:18080 is not owned by the running FlowContext Caddy"
+  caddy_port=$(docker compose --env-file .env port caddy 80) \
+    || fail "could not verify the running FlowContext Caddy port"
+  [ "$caddy_port" = "127.0.0.1:18080" ] \
+    || fail "127.0.0.1:18080 is not the configured FlowContext Caddy port"
 fi
 printf '%s\n' "Nginx owns public TLS; FlowContext will use 127.0.0.1:18080"
 printf '%s\n' "preflight passed"
