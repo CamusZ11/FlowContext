@@ -1,7 +1,8 @@
 use keyring::Entry;
+use std::{fs, io::ErrorKind, path::Path};
 use tauri::{AppHandle, Wry};
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_store::StoreExt;
+use tauri_plugin_store::{resolve_store_path, StoreExt};
 use url::Url;
 
 const KEYRING_SERVICE: &str = "com.camus.flowcontext.auth.v2";
@@ -69,19 +70,32 @@ pub fn secure_storage_remove(key: String) -> Result<(), String> {
     }
 }
 
+pub(crate) fn read_device_token_clear_intent(path: &Path) -> Result<bool, String> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.to_string()),
+    };
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    let state = value
+        .as_object()
+        .ok_or_else(|| "invalid device token clear intent store".to_owned())?;
+    match state.get(DEVICE_TOKEN_CLEAR_INTENT_KEY) {
+        None => Ok(false),
+        Some(serde_json::Value::Bool(value)) => Ok(*value),
+        Some(_) => Err("invalid device token clear intent marker".to_owned()),
+    }
+}
+
 /// This marker deliberately lives outside the native credential provider.
 /// It contains no credential material; it only prevents a previously cleared
 /// token from becoming readable again if both Keychain overwrite and delete
 /// fail during the same logout attempt.
 #[tauri::command]
 pub fn device_token_clear_intent_get(app: AppHandle<Wry>) -> Result<bool, String> {
-    let store = app
-        .store(AUTH_STATE_FILE)
-        .map_err(|error| error.to_string())?;
-    Ok(store
-        .get(DEVICE_TOKEN_CLEAR_INTENT_KEY)
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false))
+    let path = resolve_store_path(&app, AUTH_STATE_FILE).map_err(|error| error.to_string())?;
+    read_device_token_clear_intent(&path)
 }
 
 #[tauri::command]

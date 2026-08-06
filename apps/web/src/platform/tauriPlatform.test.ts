@@ -215,6 +215,26 @@ describe("Tauri platform", () => {
     expect(clearIntent).toBe(false);
   });
 
+  it("does not read an old native token when the clear-intent state is unreadable", async () => {
+    const nativeTokenReads = vi.fn();
+    const invoke: TauriInvoke = async (command, args) => {
+      const key = String(args?.key ?? "");
+      if (command === "device_token_clear_intent_get") {
+        throw new Error("invalid device token clear intent store");
+      }
+      if (command === "secure_storage_get" && key === "device-id") return "device-mac-1";
+      if (command === "secure_storage_get" && key === "flowcontext.device-token") {
+        nativeTokenReads();
+        return "persistent-session";
+      }
+      return null;
+    };
+    const restartedLaunch = await createTauriPlatform({ invoke });
+
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBeNull();
+    expect(nativeTokenReads).not.toHaveBeenCalled();
+  });
+
   it("also deletes the process-memory copy after native credential deletion succeeds", async () => {
     const nativeValues = new Map([
       ["device-id", "device-mac-1"],
