@@ -4,6 +4,9 @@
 # untrusted input even though its mode is checked by the caller.
 load_flowcontext_env() {
   [ "$#" -eq 1 ] && [ -r "$1" ] || return 1
+  # Shell read implementations can silently discard NUL, so inspect bytes
+  # before parsing lines. `od` renders NUL as an unambiguous 00 token.
+  if LC_ALL=C od -An -v -t x1 "$1" | grep -Eq '(^|[[:space:]])00([[:space:]]|$)'; then return 1; fi
 
   POSTGRES_PASSWORD=
   FLOWCONTEXT_OWNER_ID=

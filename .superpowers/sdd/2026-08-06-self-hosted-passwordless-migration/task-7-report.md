@@ -38,6 +38,13 @@
 - Shell syntax checks and Compose config using contract-only values — pass.
 - Disposable PostgreSQL `test:postgres` — pass (5/5), then test container/network removed.
 - `pnpm verify` — pass.
+## NUL-byte remediation
+- `env.sh` now performs a byte-level `LC_ALL=C od` scan before any line read and rejects the `00` byte token. This closes the shell `read` NUL-elision path without executing input.
+- Added an otherwise-valid `.env` fixture containing one NUL byte; it is rejected silently before parsing.
+## NUL-byte verification
+- RED: the NUL fixture was accepted before byte scanning.
+- GREEN: deployment contract suite passes 8/8, including the NUL fixture and non-execution checks.
+- Shell syntax checks, Compose config with contract-only values, and `pnpm verify` pass.
 ## Final review remediation
 - Added trusted, versioned `env.sh`; it reads `.env` as data instead of executing it. The loader accepts only the four complete expected `KEY=VALUE` entries, rejects blank/malformed/extra/duplicate/missing keys, control characters, `$(`, and backticks, and exports literal values only after validation.
 - Both `preflight.sh` and `deploy.sh` retain their own 0600 checks, source only the trusted loader, and fail closed if it rejects `.env`. Neither script sources `.env` or prints any value.

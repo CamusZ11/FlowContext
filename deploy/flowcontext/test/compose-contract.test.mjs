@@ -163,3 +163,24 @@ test("strict environment loader never executes command substitution text", async
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("strict environment loader rejects a NUL byte before line parsing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "flowcontext-env-contract-"));
+  const envPath = join(directory, ".env");
+  const helper = new URL("env.sh", root).pathname;
+  try {
+    await writeFile(envPath, Buffer.from([
+      "POSTGRES_PASSWORD=literal\0value",
+      "FLOWCONTEXT_OWNER_ID=00000000-0000-4000-8000-000000000000",
+      "FLOWCONTEXT_PUBLIC_URL=flowcontext.example.com",
+      "ACME_EMAIL=operator@example.com",
+    ].join("\n")));
+    const result = spawnSync("/bin/sh", ["-c", `. "${helper}"; load_flowcontext_env "$1"`, "--", envPath], { encoding: "utf8" });
+
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
