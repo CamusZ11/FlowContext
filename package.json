@@ -4,6 +4,9 @@
   "packageManager": "pnpm@11.5.0",
   "engines": { "node": ">=22" },
   "scripts": {
+    "api:migrate": "pnpm --filter @flowcontext/api migrate",
+    "api:test": "pnpm --filter @flowcontext/api test",
+    "api:typecheck": "pnpm --filter @flowcontext/api typecheck",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",

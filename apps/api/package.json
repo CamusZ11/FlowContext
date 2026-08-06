@@ -1,0 +1,24 @@
+{
+  "name": "@flowcontext/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "migrate": "tsx src/migrate.ts"
+  },
+  "dependencies": {
+    "fastify": "5.11.2",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/pg": "8.20.4",
+    "tsx": "4.22.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
