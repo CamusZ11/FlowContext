@@ -22,12 +22,24 @@ export interface AdminDependencies {
   write: (line: string) => void;
 }
 
-function parseTtlMinutes(args: string[]): number {
-  if (args.length === 0) return DEFAULT_TTL_MINUTES;
-  if (args.length !== 2 || args[0] !== "--ttl-minutes") throw new Error("ttl_minutes_invalid");
-  const ttl = Number(args[1]);
-  if (!Number.isInteger(ttl) || ttl < MIN_TTL_MINUTES || ttl > MAX_TTL_MINUTES) throw new Error("ttl_minutes_invalid");
-  return ttl;
+function parseEnrollmentOptions(args: string[]): { deviceId: string; ttlMinutes: number } {
+  let deviceId: string | undefined;
+  let ttlMinutes = DEFAULT_TTL_MINUTES;
+  let ttlSpecified = false;
+  for (let index = 0; index < args.length; index += 2) {
+    const key = args[index];
+    const value = args[index + 1];
+    if (value === undefined) throw new Error(key === "--ttl-minutes" ? "ttl_minutes_invalid" : "device_id_invalid");
+    if (key === "--device-id" && deviceId === undefined) deviceId = value;
+    else if (key === "--ttl-minutes" && !ttlSpecified) {
+      ttlMinutes = Number(value);
+      ttlSpecified = true;
+    }
+    else throw new Error(key === "--ttl-minutes" ? "ttl_minutes_invalid" : "device_id_invalid");
+  }
+  if (!deviceId || !UUID_PATTERN.test(deviceId)) throw new Error("device_id_invalid");
+  if (!Number.isInteger(ttlMinutes) || ttlMinutes < MIN_TTL_MINUTES || ttlMinutes > MAX_TTL_MINUTES) throw new Error("ttl_minutes_invalid");
+  return { deviceId, ttlMinutes };
 }
 
 function parseDeviceId(args: string[]): string {
@@ -40,12 +52,13 @@ function parseDeviceId(args: string[]): string {
 export async function runAdminCommand(args: string[], dependencies: AdminDependencies): Promise<void> {
   const [resource, action, ...options] = args;
   if (resource === "enrollment" && action === "create") {
-    const ttlMinutes = parseTtlMinutes(options);
+    const { deviceId, ttlMinutes } = parseEnrollmentOptions(options);
     const enrollmentCode = dependencies.generateEnrollmentCode();
     const expiresAt = new Date(dependencies.now().getTime() + ttlMinutes * 60_000).toISOString();
     const enrollment = await dependencies.repository.createEnrollment({
       codeHash: hashSecret(enrollmentCode),
       expiresAt,
+      expectedDeviceId: deviceId,
     });
     dependencies.write(enrollmentCode);
     dependencies.write(`enrollment_id=${enrollment.id} expires_at=${enrollment.expiresAt}`);

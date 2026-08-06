@@ -18,12 +18,12 @@ chmod 0600 .env
 - `ACME_EMAIL`：用于 Caddy/Let's Encrypt 的通知邮箱。
 `.env` 不得提交、复制到聊天或终端记录中；它的权限必须保持 0600。
 ## 部署与日常运维
-先运行 `./preflight.sh`，再运行 `./deploy.sh`。脚本会在启动 API 前执行数据库迁移，并等待 PostgreSQL 健康检查。
+先运行 `./preflight.sh`，再运行 `./deploy.sh`。预检会校验 `.env` 为 0600、Docker Compose 配置、DNS、可写数据目录和 80/443 监听摘要；部署会等待容器健康并以公网 HTTPS `/healthz` 复验，任一步失败即以非零状态退出，不会打印成功 URL。
 为新设备签发一次性注册码：
 ```sh
 ./create-enrollment.sh <device-id UUID>
 ```
-该命令只在服务器私有 API 容器内执行并输出一次注册码；请通过安全渠道输入设备，勿记录或转发。
+该命令把注册码预绑定到该 UUID 对应的设备，只在服务器私有 API 容器内执行并输出一次注册码；请通过安全渠道输入该设备，勿记录或转发。
 撤销设备：
 ```sh
 ./revoke-device.sh <device-id UUID>

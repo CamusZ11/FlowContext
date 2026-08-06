@@ -20,6 +20,13 @@ test("compose keeps database and API private behind Caddy", async () => {
   assert.doesNotMatch(serviceBlock(compose, "postgres"), /^\s*ports:/m);
   assert.doesNotMatch(serviceBlock(compose, "api"), /^\s*ports:/m);
   assert.match(compose, /flowcontext_internal:\s*\n\s*internal: true/);
+  assert.match(compose, /flowcontext_edge:/);
+  assert.match(serviceBlock(compose, "caddy"), /- flowcontext_edge/);
+  for (const service of ["postgres", "api"]) {
+    const networkBlock = serviceBlock(compose, service);
+    assert.match(networkBlock, /- flowcontext_internal/);
+    assert.doesNotMatch(networkBlock, /flowcontext_edge/);
+  }
 });
 
 test("compose has persistent, healthy, restarting services without embedded secrets", async () => {
@@ -66,12 +73,19 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(preflight, /docker compose/);
   assert.match(preflight, /SSH_CONNECTION/);
   assert.match(preflight, /FLOWCONTEXT_PUBLIC_URL/);
-  assert.match(deploy, /docker compose .*up -d --build/);
+  assert.match(preflight, /stat/);
+  assert.match(preflight, /0600/);
+  assert.match(preflight, /docker compose --env-file \.env config/);
+  assert.match(preflight, /ss -ltn/);
+  assert.match(deploy, /docker compose --env-file \.env config/);
+  assert.match(deploy, /docker compose --env-file \.env up -d --build --wait/);
+  assert.match(deploy, /curl .*https:\/\/\$FLOWCONTEXT_PUBLIC_URL\/healthz/);
+  assert.match(deploy, /printf 'deployed: https:\/\/%s/);
   for (const script of [enroll, revoke]) {
     assert.match(script, /UUID_PATTERN=/);
     assert.match(script, /docker compose .*exec .*api/);
   }
-  assert.match(enroll, /enrollment create/);
+  assert.match(enroll, /enrollment create --device-id "\$device_id"/);
   assert.match(revoke, /device revoke/);
   assert.match(readme, /(域名\/DNS|domain\/DNS)/i);
   assert.match(readme, /0600/);

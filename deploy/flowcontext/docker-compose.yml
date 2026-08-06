@@ -57,6 +57,7 @@ services:
       - ${FLOWCONTEXT_DATA_DIR:-/srv/flowcontext/data}/caddy-config:/config
     networks:
       - flowcontext_internal
+      - flowcontext_edge
     healthcheck:
       test: ["CMD", "caddy", "version"]
       interval: 30s
@@ -69,3 +70,4 @@ volumes:
 networks:
   flowcontext_internal:
     internal: true
+  flowcontext_edge:

@@ -19,3 +19,13 @@
 ## Scope and safety
 - No server connection, real `.env`, credentials, data export/import, or application runtime behavior was changed.
 - An API image build was started with contract-only values but the local Docker daemon could not finish pulling `node:22-alpine` during this session; this is an environment/network limitation, not a failed build command. The Compose model and Caddy config were validated independently.
+## Review remediation
+- Split networking into `flowcontext_edge` and the internal-only `flowcontext_internal`: Caddy joins both so it can obtain ACME certificates, while API and PostgreSQL join only the internal network.
+- `preflight.sh` now requires `.env` mode 0600, validates Compose without printing values, emits only a non-sensitive 80/443 listener summary, and checks the DNS/TLS hostname precondition. `deploy.sh` repeats Compose validation, uses `up -d --build --wait --wait-timeout 120`, verifies public HTTPS `/healthz`, and prints the URL only after all checks succeed.
+- Added forward-only `005_prebound_device_enrollments.sql` without changing migrations 001–004. Admin enrollment creation now requires a UUID device ID, stores that binding with the hash, and enrollment atomically refuses a different device ID. The deploy wrapper passes its required device ID to that server-only command.
+- Added contract coverage for edge/internal boundaries and deployment failure gates, API tests for pre-bound enrollment, malformed/missing IDs, and duplicate CLI flags.
+## Remediation verification
+- Contract suite: 4/4 passing.
+- API admin/enrollment suite: 46 tests passing (with five opt-in PostgreSQL tests skipped in the normal suite).
+- Disposable PostgreSQL: 5/5 passing with migrations 001–005 applied, then container and network removed.
+- Full `pnpm verify`: passing.

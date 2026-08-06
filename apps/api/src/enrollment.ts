@@ -30,7 +30,7 @@ export interface DeviceManagementRepository {
 }
 
 export interface EnrollmentManagementRepository {
-  createEnrollment(input: { codeHash: string; expiresAt: string }): Promise<{ id: string; expiresAt: string }>;
+  createEnrollment(input: { codeHash: string; expiresAt: string; expectedDeviceId: string }): Promise<{ id: string; expiresAt: string }>;
 }
 
 type QueryResult<Row> = { rows: Row[]; rowCount: number | null };
@@ -80,7 +80,7 @@ export class PostgresAuthRepository implements AuthRepository, DeviceManagementR
     try {
       await client.query("begin");
       const consumed = await client.query(
-        "update device_enrollments set consumed_at = now(), device_id = $2 where code_hash = $1 and consumed_at is null and expires_at > now()",
+        "update device_enrollments set consumed_at = now(), device_id = $2 where code_hash = $1 and consumed_at is null and expires_at > now() and (device_id is null or device_id = $2)",
         [input.codeHash, input.deviceId],
       );
       if (consumed.rowCount !== 1) {
@@ -101,13 +101,13 @@ export class PostgresAuthRepository implements AuthRepository, DeviceManagementR
     }
   }
 
-  async createEnrollment(input: { codeHash: string; expiresAt: string }): Promise<{ id: string; expiresAt: string }> {
+  async createEnrollment(input: { codeHash: string; expiresAt: string; expectedDeviceId: string }): Promise<{ id: string; expiresAt: string }> {
     const client = await this.pool.connect() as unknown as EnrollmentClient;
     try {
       await client.query("begin");
       const result = await client.query<{ id: string; expires_at: string }>(
-        "insert into device_enrollments (code_hash, expires_at) values ($1, $2) returning id, expires_at",
-        [input.codeHash, input.expiresAt],
+        "insert into device_enrollments (code_hash, expires_at, device_id) values ($1, $2, $3) returning id, expires_at",
+        [input.codeHash, input.expiresAt, input.expectedDeviceId],
       );
       const enrollment = result.rows[0];
       if (!enrollment) throw new Error("enrollment_creation_failed");

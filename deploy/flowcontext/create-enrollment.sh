@@ -11,4 +11,4 @@ fi
 
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$root_dir"
-docker compose --env-file .env exec -T api pnpm --filter @flowcontext/api admin enrollment create
+docker compose --env-file .env exec -T api pnpm --filter @flowcontext/api admin enrollment create --device-id "$device_id"

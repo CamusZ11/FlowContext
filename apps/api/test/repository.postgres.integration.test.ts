@@ -36,6 +36,7 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
       "002_api_constraints.sql",
       "003_session_platform.sql",
       "004_session_platform_nullable.sql",
+      "005_prebound_device_enrollments.sql",
     ]);
     repository = new PostgresFlowRepository(pool);
   });

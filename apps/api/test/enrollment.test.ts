@@ -21,7 +21,7 @@ class EnrollmentRepository implements AuthRepository {
     tokenHash: string;
   }): Promise<boolean> {
     const enrollment = this.enrollments.get(input.codeHash);
-    if (!enrollment || enrollment.consumedAt || enrollment.expiresAt <= new Date().toISOString()) return false;
+    if (!enrollment || enrollment.consumedAt || enrollment.expiresAt <= new Date().toISOString() || (enrollment.deviceId && enrollment.deviceId !== input.deviceId)) return false;
 
     enrollment.consumedAt = new Date().toISOString();
     enrollment.deviceId = input.deviceId;
@@ -105,7 +105,29 @@ describe("POST /v1/devices/enroll", () => {
     ]);
   });
 
-  it("creates a pending enrollment with only the supplied code hash", async () => {
+  it("rejects a code pre-bound to a different device", async () => {
+    const repository = new EnrollmentRepository();
+    const enrollmentCode = randomBytes(24).toString("base64url");
+    repository.enrollments.set(hashSecret(enrollmentCode), {
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      consumedAt: null,
+      deviceId: "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725",
+    });
+    const app = buildServer({ repository, config: { port: 8080, databaseUrl: "postgres://test", ownerId: "00000000-0000-0000-0000-000000000001", logLevel: "silent" } });
+
+    await app.ready();
+    const response = await app.inject({ method: "POST", url: "/v1/devices/enroll", payload: {
+      enrollmentCode,
+      deviceId: "6c76f8f1-3e02-4d87-b648-2f2d66be2ec6",
+      platform: "macos",
+    } });
+
+    expect(response.statusCode).toBe(401);
+    expect(await repository.findEnrollment(hashSecret(enrollmentCode))).toMatchObject({ consumedAt: null });
+    await app.close();
+  });
+
+  it("creates a pending enrollment bound to the requested device", async () => {
     const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
     const client = {
       async query(sql: string, values?: readonly unknown[]) {
@@ -127,6 +149,7 @@ describe("POST /v1/devices/enroll", () => {
     await expect(repository.createEnrollment({
       codeHash: "a".repeat(64),
       expiresAt: "2026-08-06T00:15:00.000Z",
+      expectedDeviceId: "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725",
     })).resolves.toEqual({
       id: "6c76f8f1-3e02-4d87-b648-2f2d66be2ec6",
       expiresAt: "2026-08-06T00:15:00.000Z",
@@ -136,6 +159,7 @@ describe("POST /v1/devices/enroll", () => {
     expect(statements.find(({ sql }) => sql.startsWith("insert into device_enrollments"))?.values).toEqual([
       "a".repeat(64),
       "2026-08-06T00:15:00.000Z",
+      "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725",
     ]);
   });
 
