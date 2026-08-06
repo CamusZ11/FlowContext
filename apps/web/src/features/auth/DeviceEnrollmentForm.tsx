@@ -20,7 +20,6 @@ export function DeviceEnrollmentForm({
   auth,
 }: DeviceEnrollmentFormProps) {
   const platform = usePlatform();
-  const [currentApiUrl, setCurrentApiUrl] = useState(apiUrl);
   const [currentEnrollmentCode, setCurrentEnrollmentCode] = useState(enrollmentCode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +32,13 @@ export function DeviceEnrollmentForm({
     setEnrolled(false);
     try {
       const enrollmentAuth = auth ?? createHttpAuth({
-        baseUrl: currentApiUrl,
+        baseUrl: apiUrl,
         storage: platform.sessionStorage,
         deviceId: platform.deviceId,
         devicePlatform: platform.devicePlatform ?? currentDevicePlatform(),
       });
       await enrollmentAuth.enroll({
-        apiUrl: currentApiUrl.trim(),
+        apiUrl: apiUrl.trim(),
         enrollmentCode: currentEnrollmentCode.trim(),
       });
       setCurrentEnrollmentCode("");
@@ -65,8 +64,8 @@ export function DeviceEnrollmentForm({
           <input
             type="url"
             autoComplete="url"
-            value={currentApiUrl}
-            onChange={(event) => setCurrentApiUrl(event.target.value)}
+            value={apiUrl}
+            readOnly
             required
           />
         </label>

@@ -94,18 +94,24 @@ export function createTauriSessionStorage(
     async () => asString(await invoke("secure_storage_get", { key })),
     () => fallbackStorage.get(key),
   );
-  const set = (key: string, value: string) => useNativeOrFallback(
-    async () => {
+  const set = async (key: string, value: string) => {
+    try {
       await invoke("secure_storage_set", { key, value });
-    },
-    () => fallbackStorage.set(key, value),
-  );
-  const remove = (key: string) => useNativeOrFallback(
-    async () => {
+    } catch {
+      await fallbackStorage.set(key, value);
+      return;
+    }
+    await fallbackStorage.remove(key);
+  };
+  const remove = async (key: string) => {
+    try {
       await invoke("secure_storage_remove", { key });
-    },
-    () => fallbackStorage.remove(key),
-  );
+    } catch (reason: unknown) {
+      await fallbackStorage.remove(key);
+      throw reason;
+    }
+    await fallbackStorage.remove(key);
+  };
   return {
     get,
     set,

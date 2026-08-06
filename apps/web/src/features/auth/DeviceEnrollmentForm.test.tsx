@@ -37,6 +37,7 @@ it("stores the enrollment token only through platform session storage", async ()
       <DeviceEnrollmentForm apiUrl="https://api.example" enrollmentCode="single-use" />
     </PlatformProvider>,
   );
+  expect(screen.getByLabelText("API 地址")).toHaveAttribute("readonly");
   await user.click(screen.getByRole("button", { name: "登记设备" }));
 
   expect(await screen.findByRole("status")).toHaveTextContent("设备登记成功");

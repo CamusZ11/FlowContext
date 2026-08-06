@@ -154,13 +154,20 @@ export function createHttpAuth({
   devicePlatform,
   fetchImpl,
 }: HttpAuthFetchOptions): PasswordlessAuthPort {
-  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
   if (!normalizedBaseUrl) throw new Error("FlowContext API URL is required");
   const requestFetch = fetchImpl ?? ((input: string, init?: RequestInit) => fetch(input, init));
   const listeners = new Set<(session: AuthSession | null) => void>();
+  let credentialMutationTail: Promise<void> = Promise.resolve();
 
   const notify = (session: AuthSession | null) => {
     for (const listener of [...listeners]) listener(session);
+  };
+
+  const mutateCredential = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = credentialMutationTail.then(operation, operation);
+    credentialMutationTail = result.then(() => undefined, () => undefined);
+    return result;
   };
 
   const request = async (
@@ -168,16 +175,13 @@ export function createHttpAuth({
     path: string,
     method: "GET" | "POST",
     body?: Record<string, unknown>,
-    authenticated = true,
+    authToken?: string,
   ): Promise<Response> => {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
-    if (authenticated) {
-      const token = await readAuthToken(storage);
-      if (token) headers.Authorization = `Bearer ${token}`;
-    }
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
     const response = await requestFetch(`${requestBaseUrl}${path}`, {
       method,
       headers,
@@ -191,16 +195,18 @@ export function createHttpAuth({
     const token = await readAuthToken(storage);
     if (!token) return null;
     try {
-      const response = await request(requestBaseUrl, "/v1/auth/session", "GET");
+      const response = await request(requestBaseUrl, "/v1/auth/session", "GET", undefined, token);
       const session = asSession(await parseHttpAuthJson(response));
       if (!session) throw new HttpAuthError("invalid_response", response.status);
       return session;
     } catch (reason: unknown) {
       if (reason instanceof HttpAuthError && reason.status === 401) {
-        if (await readAuthToken(storage) === token) {
+        const cleared = await mutateCredential(async () => {
+          if (await readAuthToken(storage) !== token) return false;
           await clearAuthToken(storage);
-          notify(null);
-        }
+          return true;
+        });
+        if (cleared) notify(null);
         return null;
       }
       throw reason;
@@ -221,8 +227,14 @@ export function createHttpAuth({
       };
     },
     async enroll({ apiUrl, enrollmentCode }) {
-      const enrollmentBaseUrl = apiUrl.replace(/\/+$/, "");
-      if (!enrollmentBaseUrl || !enrollmentCode || !deviceId || !devicePlatform) {
+      const enrollmentBaseUrl = apiUrl.trim().replace(/\/+$/, "");
+      if (
+        !enrollmentBaseUrl
+        || enrollmentBaseUrl !== normalizedBaseUrl
+        || !enrollmentCode
+        || !deviceId
+        || !devicePlatform
+      ) {
         throw new HttpAuthError("invalid_enrollment", 422);
       }
       const response = await request(
@@ -230,7 +242,6 @@ export function createHttpAuth({
         "/v1/devices/enroll",
         "POST",
         { enrollmentCode, deviceId, platform: devicePlatform },
-        false,
       );
       const payload = await parseHttpAuthJson(response);
       if (
@@ -242,14 +253,15 @@ export function createHttpAuth({
       ) {
         throw new HttpAuthError("invalid_response", response.status);
       }
-      await writeAuthToken(storage, payload.deviceToken);
+      const deviceToken = payload.deviceToken;
+      await mutateCredential(() => writeAuthToken(storage, deviceToken));
       const session = await getSessionAt(enrollmentBaseUrl);
       if (!session) throw new HttpAuthError("device_unauthorized", 401);
       notify(session);
       return session;
     },
     async clearDeviceCredential() {
-      await clearAuthToken(storage);
+      await mutateCredential(() => clearAuthToken(storage));
       notify(null);
     },
   };

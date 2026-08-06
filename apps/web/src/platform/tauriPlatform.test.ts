@@ -128,6 +128,104 @@ describe("Tauri platform", () => {
     expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBe("persistent-session");
   });
 
+  it("surfaces native credential deletion failure instead of pretending it was cleared", async () => {
+    const values = new Map([
+      ["device-id", "device-mac-1"],
+      ["flowcontext.device-token", "persistent-session"],
+    ]);
+    let failRemove = true;
+    const invoke: TauriInvoke = async (command, args) => {
+      const key = String(args?.key ?? "");
+      if (command === "secure_storage_get") return values.get(key) ?? null;
+      if (command === "secure_storage_set") {
+        values.set(key, String(args?.value ?? ""));
+        return null;
+      }
+      if (command === "secure_storage_remove") {
+        if (failRemove) throw new Error("keychain delete failed");
+        values.delete(key);
+      }
+      return null;
+    };
+    const firstLaunch = await createTauriPlatform({ invoke });
+
+    await expect(firstLaunch.sessionStorage.remove("flowcontext.device-token"))
+      .rejects.toThrow("keychain delete failed");
+
+    failRemove = false;
+    const restartedLaunch = await createTauriPlatform({ invoke });
+    expect(await restartedLaunch.sessionStorage.get("flowcontext.device-token")).toBe("persistent-session");
+  });
+
+  it("also deletes the process-memory copy after native credential deletion succeeds", async () => {
+    const nativeValues = new Map([
+      ["device-id", "device-mac-1"],
+      ["flowcontext.device-token", "persistent-session"],
+    ]);
+    const fallbackValues = new Map([["flowcontext.device-token", "persistent-session"]]);
+    let failNativeGet = false;
+    const invoke: TauriInvoke = async (command, args) => {
+      const key = String(args?.key ?? "");
+      if (command === "secure_storage_get") {
+        if (failNativeGet) throw new Error("keychain read failed");
+        return nativeValues.get(key) ?? null;
+      }
+      if (command === "secure_storage_set") {
+        nativeValues.set(key, String(args?.value ?? ""));
+        return null;
+      }
+      if (command === "secure_storage_remove") nativeValues.delete(key);
+      return null;
+    };
+    const fallbackStorage = {
+      get: (key: string) => fallbackValues.get(key) ?? null,
+      set: (key: string, value: string) => { fallbackValues.set(key, value); },
+      remove: (key: string) => { fallbackValues.delete(key); },
+      getItem: (key: string) => fallbackValues.get(key) ?? null,
+      setItem: (key: string, value: string) => { fallbackValues.set(key, value); },
+      removeItem: (key: string) => { fallbackValues.delete(key); },
+    };
+    const platform = await createTauriPlatform({ invoke, fallbackStorage });
+
+    await platform.sessionStorage.remove("flowcontext.device-token");
+    failNativeGet = true;
+
+    expect(await platform.sessionStorage.get("flowcontext.device-token")).toBeNull();
+  });
+
+  it("discards a stale process-memory token after a newer native token is stored", async () => {
+    const nativeValues = new Map([["device-id", "device-mac-1"]]);
+    const fallbackValues = new Map([["flowcontext.device-token", "stale-session"]]);
+    let failNativeGet = false;
+    const invoke: TauriInvoke = async (command, args) => {
+      const key = String(args?.key ?? "");
+      if (command === "secure_storage_get") {
+        if (failNativeGet) throw new Error("keychain read failed");
+        return nativeValues.get(key) ?? null;
+      }
+      if (command === "secure_storage_set") {
+        nativeValues.set(key, String(args?.value ?? ""));
+        return null;
+      }
+      if (command === "secure_storage_remove") nativeValues.delete(key);
+      return null;
+    };
+    const fallbackStorage = {
+      get: (key: string) => fallbackValues.get(key) ?? null,
+      set: (key: string, value: string) => { fallbackValues.set(key, value); },
+      remove: (key: string) => { fallbackValues.delete(key); },
+      getItem: (key: string) => fallbackValues.get(key) ?? null,
+      setItem: (key: string, value: string) => { fallbackValues.set(key, value); },
+      removeItem: (key: string) => { fallbackValues.delete(key); },
+    };
+    const platform = await createTauriPlatform({ invoke, fallbackStorage });
+
+    await platform.sessionStorage.set("flowcontext.device-token", "new-session");
+    failNativeGet = true;
+
+    expect(await platform.sessionStorage.get("flowcontext.device-token")).toBeNull();
+  });
+
   it("opens codex links through the validated native command", async () => {
     const { invoke, calls } = secureInvoke();
     const platform = await createTauriPlatform({
