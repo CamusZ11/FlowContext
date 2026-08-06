@@ -10,6 +10,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@flowcontext/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       fastify:
         specifier: 5.11.2
         version: 5.11.2

@@ -4,6 +4,9 @@ import { authenticate, hashSecret, type Principal } from "./auth.js";
 import type { ApiConfig } from "./config.js";
 import { invalidRequest, ApiError } from "./errors.js";
 import { generateDeviceToken, type AuthRepository } from "./enrollment.js";
+import type { FlowDataRepository } from "./repository.js";
+import { registerFlowRoutes } from "./router.js";
+import type { TodoEventSource } from "./sse.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -13,8 +16,10 @@ declare module "fastify" {
 
 export interface ServerDependencies {
   config: ApiConfig;
-  repository: AuthRepository;
+  repository: AuthRepository & FlowDataRepository;
   logger?: FastifyServerOptions["logger"];
+  todoEvents?: TodoEventSource;
+  now?: () => Date;
 }
 
 function isEnrollmentPayload(value: unknown): value is { enrollmentCode: string; deviceId: string; platform: "macos" | "windows" } {
@@ -27,7 +32,7 @@ function isEnrollmentPayload(value: unknown): value is { enrollmentCode: string;
     && (payload.platform === "macos" || payload.platform === "windows");
 }
 
-export function buildServer({ config, repository, logger }: ServerDependencies): FastifyInstance {
+export function buildServer({ config, repository, logger, todoEvents, now }: ServerDependencies): FastifyInstance {
   const app = Fastify({
     logController: new LogController({ disableRequestLogging: true }),
     logger: logger ?? (config.logLevel === "silent" ? false : { level: config.logLevel }),
@@ -35,11 +40,17 @@ export function buildServer({ config, repository, logger }: ServerDependencies):
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ApiError) return reply.status(error.statusCode).send({ error: error.code });
+    if (typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 400) {
+      return reply.status(400).send({ error: "invalid_json" });
+    }
     return reply.status(500).send({ error: "internal_error" });
   });
 
+  app.setNotFoundHandler((_request, reply) => reply.status(404).send({ error: "not_found" }));
+
   app.addHook("preHandler", async (request) => {
-    if (!request.url.startsWith("/v1/") || request.url === "/v1/devices/enroll") return;
+    const pathname = request.url.split("?", 1)[0];
+    if (!pathname.startsWith("/v1/") || pathname === "/v1/devices/enroll") return;
     request.principal = await authenticate(request, repository);
   });
 
@@ -62,6 +73,8 @@ export function buildServer({ config, repository, logger }: ServerDependencies):
   });
 
   app.get("/v1/auth/session", async (request) => ({ userId: request.principal!.ownerId }));
+
+  registerFlowRoutes(app, repository, { todoEvents, now });
 
   return app;
 }

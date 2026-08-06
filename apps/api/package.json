@@ -12,6 +12,7 @@
     "admin": "tsx src/admin.ts"
   },
   "dependencies": {
+    "@flowcontext/domain": "workspace:*",
     "fastify": "5.11.2",
     "pg": "8.22.0"
   },
