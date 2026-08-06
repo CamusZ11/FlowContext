@@ -38,3 +38,13 @@
 - Shell syntax checks and Compose config using contract-only values — pass.
 - Disposable PostgreSQL `test:postgres` — pass (5/5), then test container/network removed.
 - `pnpm verify` — pass.
+## Final review remediation
+- Added trusted, versioned `env.sh`; it reads `.env` as data instead of executing it. The loader accepts only the four complete expected `KEY=VALUE` entries, rejects blank/malformed/extra/duplicate/missing keys, control characters, `$(`, and backticks, and exports literal values only after validation.
+- Both `preflight.sh` and `deploy.sh` retain their own 0600 checks, source only the trusted loader, and fail closed if it rejects `.env`. Neither script sources `.env` or prints any value.
+- Contract tests include valid whitelist loading, malformed variants, and a marker-file assertion proving command-substitution text is not executed.
+## Final remediation verification
+- RED: deployment contract failed while both scripts sourced `.env` and the loader did not exist.
+- GREEN: `node --test deploy/flowcontext/test/compose-contract.test.mjs` — pass (7/7).
+- Shell syntax checks and Compose config using contract-only values — pass.
+- Disposable PostgreSQL `test:postgres` — pass (5/5), then test container/network removed.
+- `pnpm verify` — pass.

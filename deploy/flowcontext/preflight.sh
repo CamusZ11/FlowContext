@@ -3,6 +3,7 @@ set -eu
 
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 data_dir=${FLOWCONTEXT_DATA_DIR:-/srv/flowcontext/data}
+. "$root_dir/env.sh"
 
 fail() {
   printf '%s\n' "preflight failed: $1" >&2
@@ -18,13 +19,11 @@ docker compose version >/dev/null 2>&1 || fail "docker compose v2 is required"
 env_mode=$(stat -c '%a' "$root_dir/.env" 2>/dev/null || stat -f '%Lp' "$root_dir/.env")
 [ "$env_mode" = "600" ] || fail ".env permissions must be 0600"
 
-set -a
-. "$root_dir/.env"
-set +a
-for key in POSTGRES_PASSWORD FLOWCONTEXT_OWNER_ID FLOWCONTEXT_PUBLIC_URL ACME_EMAIL; do
-  eval "value=\${$key:-}"
-  [ -n "$value" ] || fail "$key is required"
-done
+load_flowcontext_env "$root_dir/.env" || fail ".env must contain each expected literal key exactly once"
+[ -n "$POSTGRES_PASSWORD" ] || fail "POSTGRES_PASSWORD is required"
+[ -n "$FLOWCONTEXT_OWNER_ID" ] || fail "FLOWCONTEXT_OWNER_ID is required"
+[ -n "$FLOWCONTEXT_PUBLIC_URL" ] || fail "FLOWCONTEXT_PUBLIC_URL is required"
+[ -n "$ACME_EMAIL" ] || fail "ACME_EMAIL is required"
 
 case "$FLOWCONTEXT_PUBLIC_URL" in
   *://*|*/*|*:*|*' '*) fail "FLOWCONTEXT_PUBLIC_URL must be a DNS hostname without a scheme or path" ;;

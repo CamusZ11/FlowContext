@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const root = new URL("..", import.meta.url);
@@ -82,8 +85,12 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(preflight, /grep -q '\.'/);
   assert.match(deploy, /\[ -f "\$root_dir\/\.env" \]/);
   assert.match(deploy, /stat -c/);
-  assert.match(deploy, /\. "\$root_dir\/\.env"/);
   assert.match(deploy, /FLOWCONTEXT_PUBLIC_URL is required/);
+  for (const script of [preflight, deploy]) {
+    assert.doesNotMatch(script, /\. "\$root_dir\/\.env"/);
+    assert.match(script, /\. "\$root_dir\/env\.sh"/);
+    assert.match(script, /load_flowcontext_env "\$root_dir\/\.env"/);
+  }
   assert.match(deploy, /docker compose --env-file \.env config/);
   assert.match(deploy, /docker compose --env-file \.env up -d --build --wait/);
   assert.match(deploy, /curl .*https:\/\/\$FLOWCONTEXT_PUBLIC_URL\/healthz/);
@@ -96,4 +103,63 @@ test("operator scripts validate device IDs and keep admin commands inside the pr
   assert.match(revoke, /device revoke/);
   assert.match(readme, /(域名\/DNS|domain\/DNS)/i);
   assert.match(readme, /0600/);
+});
+
+test("strict environment loader accepts only the complete literal whitelist", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "flowcontext-env-contract-"));
+  const envPath = join(directory, ".env");
+  try {
+    await writeFile(envPath, [
+      "POSTGRES_PASSWORD=literal-value",
+      "FLOWCONTEXT_OWNER_ID=00000000-0000-4000-8000-000000000000",
+      "FLOWCONTEXT_PUBLIC_URL=flowcontext.example.com",
+      "ACME_EMAIL=operator@example.com",
+    ].join("\n"));
+    const helper = new URL("env.sh", root).pathname;
+    const result = spawnSync("/bin/sh", ["-c", `. "${helper}"; load_flowcontext_env "$1"; printf '%s' "$FLOWCONTEXT_PUBLIC_URL"`, "--", envPath], { encoding: "utf8" });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "flowcontext.example.com");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("strict environment loader rejects executable syntax, unknown, duplicate, and missing keys", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "flowcontext-env-contract-"));
+  const helper = new URL("env.sh", root).pathname;
+  try {
+    for (const invalid of [
+      "POSTGRES_PASSWORD=$(false)",
+      "POSTGRES_PASSWORD=`false`",
+      "POSTGRES_PASSWORD=value\nPOSTGRES_PASSWORD=again",
+      "UNEXPECTED=value",
+      "POSTGRES_PASSWORD=value\nFLOWCONTEXT_OWNER_ID=id\nFLOWCONTEXT_PUBLIC_URL=host.example.com",
+    ]) {
+      const envPath = join(directory, `${Math.random()}.env`);
+      await writeFile(envPath, invalid);
+      const result = spawnSync("/bin/sh", ["-c", `. "${helper}"; load_flowcontext_env "$1"`, "--", envPath], { encoding: "utf8" });
+      assert.notEqual(result.status, 0, invalid);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "");
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("strict environment loader never executes command substitution text", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "flowcontext-env-contract-"));
+  const envPath = join(directory, ".env");
+  const marker = join(directory, "must-not-exist");
+  const helper = new URL("env.sh", root).pathname;
+  try {
+    await writeFile(envPath, `POSTGRES_PASSWORD=$(touch ${marker})`);
+    const result = spawnSync("/bin/sh", ["-c", `. "${helper}"; load_flowcontext_env "$1"`, "--", envPath], { encoding: "utf8" });
+
+    assert.notEqual(result.status, 0);
+    await assert.rejects(access(marker));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
