@@ -144,6 +144,7 @@ pub struct HotZoneEngine {
     left_at: Option<u64>,
     show_fired: bool,
     hide_fired: bool,
+    pointer_has_entered_visible_panel: bool,
 }
 
 impl HotZoneEngine {
@@ -159,6 +160,7 @@ impl HotZoneEngine {
             left_at: None,
             show_fired: false,
             hide_fired: false,
+            pointer_has_entered_visible_panel: false,
         }
     }
 
@@ -186,6 +188,7 @@ impl HotZoneEngine {
         // visible cycle can hide again if the cursor is already outside.
         self.hide_fired = false;
         self.left_at = None;
+        self.pointer_has_entered_visible_panel = false;
         let inside = monitor.contains_external_right_edge(cursor, self.edge_px);
         if !inside {
             self.entered_at = None;
@@ -209,8 +212,13 @@ impl HotZoneEngine {
     fn sample_visible(&mut self, now: u64, cursor: Point, bounds: Option<Rect>) -> Vec<Action> {
         let inside = bounds.is_some_and(|rect| rect.contains(cursor));
         if inside {
+            self.pointer_has_entered_visible_panel = true;
             self.left_at = None;
             self.hide_fired = false;
+            return Vec::new();
+        }
+
+        if !self.pointer_has_entered_visible_panel {
             return Vec::new();
         }
 

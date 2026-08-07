@@ -39,7 +39,12 @@ pub fn run() {
     let shortcut_plugin = tauri_plugin_global_shortcut::Builder::new()
         .with_shortcut(plugins::DEFAULT_SHORTCUT)
         .expect("default FlowContext shortcut is valid")
-        .with_handler(|app, _shortcut, _event| {
+        .with_handler(|app, _shortcut, event| {
+            // The handler fires for both key press and release; toggling on
+            // release cancels the press, so only the press may toggle.
+            if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                return;
+            }
             if let Some(window) = app.get_webview_window("main") {
                 let saved = settings::load(app).unwrap_or_default();
                 let _ = runtime::toggle_panel(window, saved);
@@ -48,9 +53,6 @@ pub fn run() {
         .build();
 
     let builder = tauri::Builder::default();
-
-    #[cfg(target_os = "macos")]
-    let builder = builder.plugin(tauri_nspanel::init());
 
     builder
         .invoke_handler(tauri::generate_handler![
@@ -91,19 +93,18 @@ pub fn run() {
 
             tray::install(&app.handle())?;
             let settings = settings::load(app.handle()).unwrap_or_default();
-            let settings_state = settings::DeviceSettingsState::new(settings);
+            let settings_state = settings::DeviceSettingsState::new(settings.clone());
             app.manage(settings_state.clone());
             if let Some(window) = app.get_webview_window("main") {
-                #[cfg(target_os = "macos")]
-                macos_window::install_fullscreen_overlay_panel(&window)?;
                 macos_window::prepare_fullscreen_overlay(&window)?;
-                let port = runtime::TauriRuntimePort::new_with_state(window, settings_state);
+                let port = runtime::TauriRuntimePort::new_with_state(window.clone(), settings_state);
                 let sampling = runtime::SamplingRuntime::start(
                     port,
                     hot_zone::HotZoneEngine::new(2.0, 150, 0),
                     runtime::SamplingRuntime::default_interval(),
                 );
                 app.manage(DesktopRuntimeState(Mutex::new(Some(sampling))));
+                runtime::show_panel(window.clone(), settings)?;
                 #[cfg(target_os = "macos")]
                 macos_lifecycle::install_wake_recovery(app.handle().clone())?;
             }

@@ -55,6 +55,23 @@ fn hides_on_the_first_sample_after_cursor_leaves_window() {
 }
 
 #[test]
+fn startup_panel_stays_visible_until_the_cursor_enters_it_once() {
+    let mut engine = HotZoneEngine::new(2.0, 150, 0);
+    assert_eq!(
+        engine.sample(0, point(100.0, 100.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(1, point(1800.0, 500.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(2, point(100.0, 100.0), monitor(), visible_window()),
+        vec![Action::Hide]
+    );
+}
+
+#[test]
 fn returning_inside_window_cancels_pending_hide_before_exit_sample() {
     let mut engine = visible_engine();
     assert_eq!(
@@ -152,7 +169,7 @@ fn ignores_duplicate_actions_while_window_is_animating() {
 }
 
 #[test]
-fn manual_show_after_previous_hide_can_hide_again_outside_panel() {
+fn manual_show_stays_open_until_the_pointer_enters_then_leaves_panel() {
     let mut engine = HotZoneEngine::new(2.0, 150, 0);
     assert_eq!(
         engine.sample(0, point(1800.0, 500.0), monitor(), visible_window()),
@@ -168,6 +185,14 @@ fn manual_show_after_previous_hide_can_hide_again_outside_panel() {
     );
     assert_eq!(
         engine.sample(3, point(100.0, 100.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(4, point(1800.0, 500.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(5, point(100.0, 100.0), monitor(), visible_window()),
         vec![Action::Hide]
     );
 }

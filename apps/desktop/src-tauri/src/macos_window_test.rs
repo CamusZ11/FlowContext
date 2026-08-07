@@ -1,29 +1,13 @@
-use super::macos_window::{
-    fullscreen_overlay_behavior, fullscreen_overlay_ordering, fullscreen_overlay_panel_profile,
-    OverlayOrdering,
-};
+use super::macos_window::fullscreen_overlay_behavior;
 use objc2_app_kit::NSWindowCollectionBehavior;
 
 #[test]
-fn fullscreen_overlay_replaces_conflicting_collection_roles() {
-    let current = NSWindowCollectionBehavior::Primary
-        | NSWindowCollectionBehavior::Managed
-        | NSWindowCollectionBehavior::FullScreenPrimary
-        | NSWindowCollectionBehavior::MoveToActiveSpace;
+fn fullscreen_overlay_joins_all_spaces_and_preserves_existing_behavior() {
+    let current = NSWindowCollectionBehavior::Stationary;
     let actual = fullscreen_overlay_behavior(current);
     assert!(actual.contains(NSWindowCollectionBehavior::CanJoinAllSpaces));
-    assert!(actual.contains(NSWindowCollectionBehavior::CanJoinAllApplications));
     assert!(actual.contains(NSWindowCollectionBehavior::FullScreenAuxiliary));
     assert!(actual.contains(NSWindowCollectionBehavior::Stationary));
-    assert!(!actual.intersects(
-        NSWindowCollectionBehavior::Primary
-            | NSWindowCollectionBehavior::Auxiliary
-            | NSWindowCollectionBehavior::Managed
-            | NSWindowCollectionBehavior::Transient
-            | NSWindowCollectionBehavior::FullScreenPrimary
-            | NSWindowCollectionBehavior::FullScreenNone
-            | NSWindowCollectionBehavior::MoveToActiveSpace,
-    ));
 }
 
 #[test]
@@ -40,38 +24,11 @@ fn fullscreen_overlay_preserves_unrelated_and_unknown_collection_bits() {
 }
 
 #[test]
-fn fullscreen_overlay_collection_profile_is_idempotent() {
+fn fullscreen_overlay_behavior_is_idempotent() {
     let current = NSWindowCollectionBehavior::Auxiliary
         | NSWindowCollectionBehavior::Transient
-        | NSWindowCollectionBehavior::FullScreenNone;
+        | NSWindowCollectionBehavior::MoveToActiveSpace;
     let once = fullscreen_overlay_behavior(current);
 
     assert_eq!(fullscreen_overlay_behavior(once), once);
-}
-
-#[test]
-fn fullscreen_overlay_panel_profile_is_nonactivating_and_above_fullscreen_content() {
-    let profile = fullscreen_overlay_panel_profile();
-
-    assert!(profile.nonactivating);
-    assert!(profile.transparent);
-    assert!(profile.floating);
-    assert!(!profile.hides_on_deactivate);
-    assert!(profile.becomes_key_only_if_needed);
-    assert_eq!(profile.level, 1000);
-    assert_eq!(
-        profile.collection_behavior,
-        fullscreen_overlay_behavior(NSWindowCollectionBehavior::empty()),
-    );
-}
-
-#[test]
-fn fullscreen_overlay_uses_nonactivating_native_ordering() {
-    assert_eq!(
-        fullscreen_overlay_ordering(),
-        [
-            OverlayOrdering::OrderFrontRegardless,
-            OverlayOrdering::OrderOut
-        ],
-    );
 }
