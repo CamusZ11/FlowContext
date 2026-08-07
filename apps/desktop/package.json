@@ -6,7 +6,7 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "node ./check-web-env.mjs && tauri build",
     "test": "node --test"
   },
   "devDependencies": {
