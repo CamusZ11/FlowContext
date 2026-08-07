@@ -277,30 +277,41 @@ pub fn show_panel<R: tauri::Runtime>(
         .map_err(|error| error.to_string())
 }
 
+pub(crate) fn stable_panel_action(_requested: Action) -> Action {
+    // FlowContext is a persistent side panel. Normalize every manual hide or
+    // toggle request to Show so stale shortcut events, wake-state replay and
+    // tray misclicks cannot move the main panel offscreen.
+    Action::Show
+}
+
 pub fn hide_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
-    let mut port = TauriRuntimePort::new(window.clone(), settings);
-    let monitor = port.selected_monitor()?;
-    let controller = port.controller();
-    let mut window_port = TauriWindowPort { window };
-    controller
-        .hide(&mut window_port, monitor)
-        .map_err(|error| error.to_string())
+    apply_stable_panel_action(window, settings, stable_panel_action(Action::Hide))
 }
 
 pub fn toggle_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
+    apply_stable_panel_action(window, settings, stable_panel_action(Action::Hide))
+}
+
+fn apply_stable_panel_action<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    settings: DeviceSettings,
+    action: Action,
+) -> Result<(), String> {
     let mut port = TauriRuntimePort::new(window.clone(), settings);
     let monitor = port.selected_monitor()?;
     let controller = port.controller();
     let mut window_port = TauriWindowPort { window };
-    controller
-        .toggle(&mut window_port, monitor)
-        .map_err(|error| error.to_string())
+    match action {
+        Action::Show => controller.show(&mut window_port, monitor),
+        Action::Hide => controller.hide(&mut window_port, monitor),
+    }
+    .map_err(|error| error.to_string())
 }
 
 /// Recreate the sampling path after macOS wakes. Native display and cursor
@@ -312,7 +323,6 @@ pub fn restart_sampling_after_wake<R: tauri::Runtime>(
     sampling: &std::sync::Mutex<Option<SamplingRuntime>>,
 ) -> Result<(), String> {
     crate::macos_window::prepare_fullscreen_overlay(&window)?;
-    crate::macos_window::hide_fullscreen_overlay(&window)?;
 
     let previous = sampling
         .lock()

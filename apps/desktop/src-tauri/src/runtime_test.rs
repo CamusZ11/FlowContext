@@ -1,5 +1,7 @@
 use super::hot_zone::{Action, HotZoneEngine, MonitorRect, Point, Rect, WindowState};
-use super::runtime::{report_runtime_result, RuntimePort, RuntimeSample, SamplingRuntime};
+use super::runtime::{
+    report_runtime_result, stable_panel_action, RuntimePort, RuntimeSample, SamplingRuntime,
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -96,6 +98,24 @@ fn runtime_can_be_retired_without_waiting_for_a_blocked_native_sample() {
 
     assert!(retired_at.elapsed() < Duration::from_millis(50));
     release_tx.send(()).unwrap();
+}
+
+#[test]
+fn stable_panel_never_maps_a_manual_request_to_hide() {
+    assert_eq!(stable_panel_action(Action::Show), Action::Show);
+    assert_eq!(stable_panel_action(Action::Hide), Action::Show);
+}
+
+#[test]
+fn wake_recovery_preserves_the_panels_existing_visibility() {
+    let source = include_str!("runtime.rs");
+    let recovery = source
+        .split("pub fn restart_sampling_after_wake")
+        .nth(1)
+        .and_then(|tail| tail.split("impl<R: tauri::Runtime> RuntimePort").next())
+        .expect("wake recovery function exists");
+
+    assert!(!recovery.contains("hide_fullscreen_overlay"));
 }
 
 #[test]
