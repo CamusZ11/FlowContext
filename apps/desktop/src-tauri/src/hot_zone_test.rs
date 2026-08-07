@@ -16,10 +16,6 @@ fn visible_window() -> WindowState {
     WindowState::visible(Rect::new(1500.0, 0.0, 420.0, 1080.0))
 }
 
-fn visible_engine() -> HotZoneEngine {
-    HotZoneEngine::new(2.0, 150, 0)
-}
-
 #[test]
 fn shows_only_after_150_ms_inside_two_pixel_edge() {
     let mut engine = HotZoneEngine::new(2.0, 150, 0);
@@ -38,54 +34,16 @@ fn shows_only_after_150_ms_inside_two_pixel_edge() {
 }
 
 #[test]
-fn hides_on_the_first_sample_after_cursor_leaves_window() {
-    let mut engine = visible_engine();
-    assert_eq!(
-        engine.sample(0, point(1800.0, 500.0), monitor(), visible_window()),
-        vec![]
-    );
-    assert_eq!(
-        engine.sample(1, point(100.0, 100.0), monitor(), visible_window()),
-        vec![Action::Hide]
-    );
-    assert_eq!(
-        engine.sample(2, point(100.0, 100.0), monitor(), visible_window()),
-        vec![]
-    );
-}
-
-#[test]
-fn startup_panel_stays_visible_until_the_cursor_enters_it_once() {
+fn visible_panel_never_auto_hides_when_cursor_moves_or_state_rerenders() {
     let mut engine = HotZoneEngine::new(2.0, 150, 0);
-    assert_eq!(
-        engine.sample(0, point(100.0, 100.0), monitor(), visible_window()),
-        vec![]
-    );
-    assert_eq!(
-        engine.sample(1, point(1800.0, 500.0), monitor(), visible_window()),
-        vec![]
-    );
-    assert_eq!(
-        engine.sample(2, point(100.0, 100.0), monitor(), visible_window()),
-        vec![Action::Hide]
-    );
-}
-
-#[test]
-fn returning_inside_window_cancels_pending_hide_before_exit_sample() {
-    let mut engine = visible_engine();
-    assert_eq!(
-        engine.sample(0, point(1800.0, 500.0), monitor(), visible_window()),
-        vec![]
-    );
-    assert_eq!(
-        engine.sample(1, point(100.0, 100.0), monitor(), visible_window()),
-        vec![Action::Hide]
-    );
-    assert_eq!(
-        engine.sample(2, point(1800.0, 500.0), monitor(), visible_window()),
-        vec![]
-    );
+    for (now, cursor) in [
+        (0, point(1800.0, 500.0)),
+        (25, point(100.0, 100.0)),
+        (1_000, point(1919.0, 500.0)),
+        (30_000, point(-500.0, -500.0)),
+    ] {
+        assert_eq!(engine.sample(now, cursor, monitor(), visible_window()), vec![]);
+    }
 }
 
 #[test]
@@ -147,52 +105,33 @@ fn ignores_duplicate_actions_while_window_is_animating() {
         ),
         vec![]
     );
-
-    let mut visible = HotZoneEngine::new(2.0, 150, 0);
-    assert_eq!(
-        visible.sample(0, point(1800.0, 500.0), monitor(), visible_window()),
-        vec![]
-    );
-    assert_eq!(
-        visible.sample(1, point(100.0, 100.0), monitor(), visible_window()),
-        vec![Action::Hide]
-    );
-    assert_eq!(
-        visible.sample(
-            500,
-            point(100.0, 100.0),
-            monitor(),
-            WindowState::visible_animating(Rect::new(1500.0, 0.0, 420.0, 1080.0))
-        ),
-        vec![]
-    );
 }
 
 #[test]
-fn manual_show_stays_open_until_the_pointer_enters_then_leaves_panel() {
+fn manual_hide_resets_edge_trigger_for_the_next_show_cycle() {
     let mut engine = HotZoneEngine::new(2.0, 150, 0);
     assert_eq!(
-        engine.sample(0, point(1800.0, 500.0), monitor(), visible_window()),
+        engine.sample(0, point(1919.0, 500.0), monitor(), hidden()),
         vec![]
     );
     assert_eq!(
-        engine.sample(1, point(100.0, 100.0), monitor(), visible_window()),
-        vec![Action::Hide]
+        engine.sample(150, point(1919.0, 500.0), monitor(), hidden()),
+        vec![Action::Show]
     );
     assert_eq!(
-        engine.sample(2, point(100.0, 100.0), monitor(), hidden()),
+        engine.sample(200, point(1800.0, 500.0), monitor(), visible_window()),
         vec![]
     );
     assert_eq!(
-        engine.sample(3, point(100.0, 100.0), monitor(), visible_window()),
+        engine.sample(250, point(1900.0, 500.0), monitor(), hidden()),
         vec![]
     );
     assert_eq!(
-        engine.sample(4, point(1800.0, 500.0), monitor(), visible_window()),
+        engine.sample(300, point(1919.0, 500.0), monitor(), hidden()),
         vec![]
     );
     assert_eq!(
-        engine.sample(5, point(100.0, 100.0), monitor(), visible_window()),
-        vec![Action::Hide]
+        engine.sample(450, point(1919.0, 500.0), monitor(), hidden()),
+        vec![Action::Show]
     );
 }

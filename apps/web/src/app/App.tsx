@@ -28,7 +28,7 @@ export function App({ mode = "web", repository, platform, auth, authApiUrl }: Ap
     </AppProviders>
   );
   return auth
-    ? <AuthGate auth={auth} apiUrl={authApiUrl}>{(session) => content(session.userId)}</AuthGate>
+    ? <AuthGate auth={auth} platform={platform} apiUrl={authApiUrl}>{(session) => content(session.userId)}</AuthGate>
     : content();
 }
 

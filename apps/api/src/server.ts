@@ -48,6 +48,29 @@ export function buildServer({ config, repository, logger, todoEvents, now }: Ser
 
   app.setNotFoundHandler((_request, reply) => reply.status(404).send({ error: "not_found" }));
 
+  // The desktop shell talks to this API from a tauri:// webview origin, so
+  // every response (including errors and SSE) must carry CORS headers and
+  // preflight must be answered before the auth hook runs. Credentials travel
+  // in the Authorization header rather than cookies, so "*" is safe here.
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.method !== "OPTIONS") return;
+    return reply
+      .status(204)
+      .headers({
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+        "access-control-allow-headers": "authorization,content-type",
+        "access-control-max-age": "86400",
+      })
+      .send();
+  });
+
+  app.addHook("onSend", async (_request, reply) => {
+    if (!reply.hasHeader("access-control-allow-origin")) {
+      reply.header("access-control-allow-origin", "*");
+    }
+  });
+
   app.addHook("preHandler", async (request) => {
     const pathname = request.url.split("?", 1)[0];
     if (!pathname.startsWith("/v1/") || pathname === "/v1/devices/enroll") return;

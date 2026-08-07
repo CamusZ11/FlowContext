@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { PlatformProvider } from "../../app/PlatformContext";
 import type { PlatformPort } from "../../platform/PlatformPort";
 import { DeviceEnrollmentForm } from "./DeviceEnrollmentForm";
 import { DEVICE_TOKEN_STORAGE_KEY } from "./useAuth";
@@ -33,9 +32,11 @@ it("stores the enrollment token only through platform session storage", async ()
   vi.stubGlobal("fetch", fetchMock);
 
   render(
-    <PlatformProvider value={platform}>
-      <DeviceEnrollmentForm apiUrl="https://api.example" enrollmentCode="single-use" />
-    </PlatformProvider>,
+    <DeviceEnrollmentForm
+      apiUrl="https://api.example"
+      enrollmentCode="single-use"
+      platform={platform}
+    />,
   );
   expect(screen.getByLabelText("API 地址")).toHaveAttribute("readonly");
   await user.click(screen.getByRole("button", { name: "登记设备" }));

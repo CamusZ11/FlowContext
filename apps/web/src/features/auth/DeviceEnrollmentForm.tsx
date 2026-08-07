@@ -1,10 +1,11 @@
 import { type FormEvent, useState } from "react";
-import { usePlatform } from "../../app/PlatformContext";
+import type { PlatformPort } from "../../platform/PlatformPort";
 import { createHttpAuth, type PasswordlessAuthPort } from "./useAuth";
 
 export interface DeviceEnrollmentFormProps {
   apiUrl: string;
   enrollmentCode: string;
+  platform: PlatformPort;
   auth?: PasswordlessAuthPort;
 }
 
@@ -17,9 +18,9 @@ function currentDevicePlatform(): "macos" | "windows" {
 export function DeviceEnrollmentForm({
   apiUrl,
   enrollmentCode,
+  platform,
   auth,
 }: DeviceEnrollmentFormProps) {
-  const platform = usePlatform();
   const [currentEnrollmentCode, setCurrentEnrollmentCode] = useState(enrollmentCode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

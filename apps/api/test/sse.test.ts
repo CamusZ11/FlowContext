@@ -45,6 +45,7 @@ describe("to-do SSE", () => {
 
     expect(raw.statusCode).toBe(200);
     expect(raw.headers["content-type"]).toBe("text/event-stream; charset=utf-8");
+    expect(raw.headers["access-control-allow-origin"]).toBe("*");
     expect(output).toContain(": connected\n\n");
     expect(output).toContain("event: todo.changed\n");
     expect(output).toContain("data: {\"date\":\"2026-08-06\",\"todoId\":\"todo-1\",\"kind\":\"upsert\"}\n\n");

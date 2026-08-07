@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { PlatformProvider } from "../../app/PlatformContext";
 import type { PlatformPort } from "../../platform/PlatformPort";
 import type { AuthSession, PasswordlessAuthPort } from "./useAuth";
 import { AuthGate } from "./AuthGate";
@@ -53,17 +52,20 @@ function testPlatform(): PlatformPort {
 
 function renderEnrollmentGate(auth: PasswordlessAuthPort, enrollmentCode = "") {
   return render(
-    <PlatformProvider value={testPlatform()}>
-      <AuthGate auth={auth} apiUrl="https://api.example" enrollmentCode={enrollmentCode}>
-        <p>主界面</p>
-      </AuthGate>
-    </PlatformProvider>,
+    <AuthGate
+      auth={auth}
+      platform={testPlatform()}
+      apiUrl="https://api.example"
+      enrollmentCode={enrollmentCode}
+    >
+      <p>主界面</p>
+    </AuthGate>,
   );
 }
 
 describe("passwordless authentication gate", () => {
   it("opens the app directly when an enrolled device token has a valid session", async () => {
-    render(<AuthGate auth={fakeAuth({ userId: "owner-1" })}>{() => <p>主界面</p>}</AuthGate>);
+    render(<AuthGate auth={fakeAuth({ userId: "owner-1" })} platform={testPlatform()}>{() => <p>主界面</p>}</AuthGate>);
 
     expect(await screen.findByText("主界面")).toBeInTheDocument();
     expect(screen.queryByLabelText(/密码|邮箱|登录/)).not.toBeInTheDocument();
@@ -71,7 +73,7 @@ describe("passwordless authentication gate", () => {
 
   it("exposes the authenticated owner identity to private app content", async () => {
     render(
-      <AuthGate auth={fakeAuth({ userId: "owner-2" })}>
+      <AuthGate auth={fakeAuth({ userId: "owner-2" })} platform={testPlatform()}>
         {(session) => <div>owner:{session.userId}</div>}
       </AuthGate>,
     );

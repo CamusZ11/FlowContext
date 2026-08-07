@@ -99,6 +99,7 @@ export async function openTodoEventStream(
   }
   response.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
+    "access-control-allow-origin": "*",
     "cache-control": "no-cache, no-transform",
     connection: "keep-alive",
     "x-accel-buffering": "no",

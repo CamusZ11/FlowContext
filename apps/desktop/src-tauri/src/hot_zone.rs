@@ -139,12 +139,8 @@ impl WindowState {
 pub struct HotZoneEngine {
     edge_px: f64,
     show_after_ms: u64,
-    hide_after_ms: u64,
     entered_at: Option<u64>,
-    left_at: Option<u64>,
     show_fired: bool,
-    hide_fired: bool,
-    pointer_has_entered_visible_panel: bool,
 }
 
 impl HotZoneEngine {
@@ -152,15 +148,8 @@ impl HotZoneEngine {
         Self {
             edge_px: edge_px.max(0.0),
             show_after_ms,
-            // The product rule is immediate hide on the first sample outside
-            // the panel.  Keep the third argument for source compatibility
-            // with the original plan; it is deliberately ignored.
-            hide_after_ms: 0,
             entered_at: None,
-            left_at: None,
             show_fired: false,
-            hide_fired: false,
-            pointer_has_entered_visible_panel: false,
         }
     }
 
@@ -179,16 +168,13 @@ impl HotZoneEngine {
             return self.sample_hidden(now, cursor, &monitor);
         }
 
-        self.sample_visible(now, cursor, window.bounds)
+        // The edge sampler only reveals the panel. Hiding is an explicit tray
+        // or shortcut action, so cursor-coordinate drift and UI rerenders can
+        // never make a visible panel disappear unexpectedly.
+        Vec::new()
     }
 
     fn sample_hidden(&mut self, now: u64, cursor: Point, monitor: &MonitorRect) -> Vec<Action> {
-        // A manual tray/shortcut show can happen after a previous Hide action;
-        // clear the one-shot guard while the window is hidden so that the next
-        // visible cycle can hide again if the cursor is already outside.
-        self.hide_fired = false;
-        self.left_at = None;
-        self.pointer_has_entered_visible_panel = false;
         let inside = monitor.contains_external_right_edge(cursor, self.edge_px);
         if !inside {
             self.entered_at = None;
@@ -205,32 +191,6 @@ impl HotZoneEngine {
             self.show_fired = true;
             self.entered_at = None;
             return vec![Action::Show];
-        }
-        Vec::new()
-    }
-
-    fn sample_visible(&mut self, now: u64, cursor: Point, bounds: Option<Rect>) -> Vec<Action> {
-        let inside = bounds.is_some_and(|rect| rect.contains(cursor));
-        if inside {
-            self.pointer_has_entered_visible_panel = true;
-            self.left_at = None;
-            self.hide_fired = false;
-            return Vec::new();
-        }
-
-        if !self.pointer_has_entered_visible_panel {
-            return Vec::new();
-        }
-
-        if self.hide_fired {
-            return Vec::new();
-        }
-
-        let left_at = *self.left_at.get_or_insert(now);
-        if now.saturating_sub(left_at) >= self.hide_after_ms {
-            self.hide_fired = true;
-            self.left_at = None;
-            return vec![Action::Hide];
         }
         Vec::new()
     }
