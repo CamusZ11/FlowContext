@@ -27,3 +27,16 @@ test("macOS overlay uses native front ordering after Tauri shows the window", as
     /window\.show\(\).*?native\.orderFrontRegardless\(\)/s,
   );
 });
+
+test("desktop uses only the manual FlowContext tray icon", async () => {
+  const config = JSON.parse(
+    await readFile(new URL("./src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+  );
+  const traySource = await readFile(
+    new URL("./src-tauri/src/tray.rs", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(config.app.trayIcon, undefined);
+  assert.match(traySource, /TrayIconBuilder::with_id\("flowcontext"\)/);
+});
