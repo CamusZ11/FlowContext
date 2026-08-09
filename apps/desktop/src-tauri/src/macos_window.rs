@@ -34,7 +34,17 @@ pub fn prepare_fullscreen_overlay<R: tauri::Runtime>(
 pub fn show_fullscreen_overlay<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
 ) -> Result<(), String> {
-    window.show().map_err(|error| error.to_string())
+    // `window.show()` updates Tauri's visibility state. Fullscreen Spaces
+    // also need the native window ordered above the fullscreen application's
+    // surface; doing that on the existing NSWindow avoids the NSPanel
+    // conversion that made ordinary hot-zone reveals disappear.
+    window.show().map_err(|error| error.to_string())?;
+    let pointer = window.ns_window().map_err(|error| error.to_string())?;
+    unsafe {
+        let native: &NSWindow = &*pointer.cast();
+        native.orderFrontRegardless();
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

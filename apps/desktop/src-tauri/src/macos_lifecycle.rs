@@ -42,11 +42,9 @@ fn register_wake_observer(
                 .inner()
                 .clone();
             let sampling = recovery_app.state::<crate::DesktopRuntimeState>();
-            if let Err(error) = crate::runtime::restart_sampling_after_wake(
-                window,
-                settings,
-                &sampling.0,
-            ) {
+            if let Err(error) =
+                crate::runtime::restart_sampling_after_wake(window, settings, &sampling.0)
+            {
                 eprintln!("FlowContext wake recovery failed: {error}");
             }
         });

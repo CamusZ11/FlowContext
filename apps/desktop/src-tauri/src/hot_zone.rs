@@ -139,8 +139,14 @@ impl WindowState {
 pub struct HotZoneEngine {
     edge_px: f64,
     show_after_ms: u64,
+    hide_after_ms: u64,
     entered_at: Option<u64>,
+    left_at: Option<u64>,
     show_fired: bool,
+    hide_fired: bool,
+    pointer_has_entered_visible_panel: bool,
+    last_window_visible: bool,
+    require_edge_exit: bool,
 }
 
 impl HotZoneEngine {
@@ -148,8 +154,16 @@ impl HotZoneEngine {
         Self {
             edge_px: edge_px.max(0.0),
             show_after_ms,
+            // Product behavior is hide on the first stable sample outside the
+            // panel. Keep the argument for source compatibility.
+            hide_after_ms: 0,
             entered_at: None,
+            left_at: None,
             show_fired: false,
+            hide_fired: false,
+            pointer_has_entered_visible_panel: false,
+            last_window_visible: false,
+            require_edge_exit: false,
         }
     }
 
@@ -165,13 +179,20 @@ impl HotZoneEngine {
         }
 
         if !window.visible {
+            if self.last_window_visible {
+                self.require_edge_exit = true;
+                self.entered_at = None;
+                self.show_fired = false;
+            }
+            self.last_window_visible = false;
+            self.pointer_has_entered_visible_panel = false;
+            self.left_at = None;
+            self.hide_fired = false;
             return self.sample_hidden(now, cursor, &monitor);
         }
 
-        // The edge sampler only reveals the panel. Hiding is an explicit tray
-        // or shortcut action, so cursor-coordinate drift and UI rerenders can
-        // never make a visible panel disappear unexpectedly.
-        Vec::new()
+        self.last_window_visible = true;
+        self.sample_visible(now, cursor, window.bounds)
     }
 
     fn sample_hidden(&mut self, now: u64, cursor: Point, monitor: &MonitorRect) -> Vec<Action> {
@@ -179,10 +200,11 @@ impl HotZoneEngine {
         if !inside {
             self.entered_at = None;
             self.show_fired = false;
+            self.require_edge_exit = false;
             return Vec::new();
         }
 
-        if self.show_fired {
+        if self.require_edge_exit || self.show_fired {
             return Vec::new();
         }
 
@@ -191,6 +213,44 @@ impl HotZoneEngine {
             self.show_fired = true;
             self.entered_at = None;
             return vec![Action::Show];
+        }
+        Vec::new()
+    }
+
+    fn sample_visible(&mut self, now: u64, cursor: Point, bounds: Option<Rect>) -> Vec<Action> {
+        let Some(bounds) = bounds else {
+            self.left_at = None;
+            return Vec::new();
+        };
+        if !cursor.x.is_finite()
+            || !cursor.y.is_finite()
+            || !bounds.x.is_finite()
+            || !bounds.y.is_finite()
+            || !bounds.width.is_finite()
+            || !bounds.height.is_finite()
+            || bounds.width <= 0.0
+            || bounds.height <= 0.0
+        {
+            self.left_at = None;
+            return Vec::new();
+        }
+
+        if bounds.contains(cursor) {
+            self.pointer_has_entered_visible_panel = true;
+            self.left_at = None;
+            self.hide_fired = false;
+            return Vec::new();
+        }
+
+        if !self.pointer_has_entered_visible_panel || self.hide_fired {
+            return Vec::new();
+        }
+
+        let left_at = *self.left_at.get_or_insert(now);
+        if now.saturating_sub(left_at) >= self.hide_after_ms {
+            self.hide_fired = true;
+            self.left_at = None;
+            return vec![Action::Hide];
         }
         Vec::new()
     }

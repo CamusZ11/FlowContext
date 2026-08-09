@@ -97,7 +97,8 @@ pub fn run() {
             app.manage(settings_state.clone());
             if let Some(window) = app.get_webview_window("main") {
                 macos_window::prepare_fullscreen_overlay(&window)?;
-                let port = runtime::TauriRuntimePort::new_with_state(window.clone(), settings_state);
+                let port =
+                    runtime::TauriRuntimePort::new_with_state(window.clone(), settings_state);
                 let sampling = runtime::SamplingRuntime::start(
                     port,
                     hot_zone::HotZoneEngine::new(2.0, 150, 0),

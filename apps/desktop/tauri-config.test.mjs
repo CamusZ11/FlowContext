@@ -15,3 +15,15 @@ test("desktop window is created visible and setup snaps it to the right edge", a
   assert.equal(config.app.windows[0].visible, true);
   assert.match(startup, /runtime::show_panel\(window\.clone\(\), settings\)\?;/);
 });
+
+test("macOS overlay uses native front ordering after Tauri shows the window", async () => {
+  const nativeWindow = await readFile(
+    new URL("./src-tauri/src/macos_window.rs", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    nativeWindow,
+    /window\.show\(\).*?native\.orderFrontRegardless\(\)/s,
+  );
+});

@@ -1,6 +1,6 @@
 use super::hot_zone::{Action, HotZoneEngine, MonitorRect, Point, Rect, WindowState};
 use super::runtime::{
-    report_runtime_result, stable_panel_action, RuntimePort, RuntimeSample, SamplingRuntime,
+    manual_panel_action, report_runtime_result, RuntimePort, RuntimeSample, SamplingRuntime,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
@@ -101,9 +101,9 @@ fn runtime_can_be_retired_without_waiting_for_a_blocked_native_sample() {
 }
 
 #[test]
-fn stable_panel_never_maps_a_manual_request_to_hide() {
-    assert_eq!(stable_panel_action(Action::Show), Action::Show);
-    assert_eq!(stable_panel_action(Action::Hide), Action::Show);
+fn manual_panel_actions_preserve_show_and_hide_requests() {
+    assert_eq!(manual_panel_action(Action::Show), Action::Show);
+    assert_eq!(manual_panel_action(Action::Hide), Action::Hide);
 }
 
 #[test]

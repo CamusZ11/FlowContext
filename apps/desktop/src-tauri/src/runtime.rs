@@ -277,28 +277,31 @@ pub fn show_panel<R: tauri::Runtime>(
         .map_err(|error| error.to_string())
 }
 
-pub(crate) fn stable_panel_action(_requested: Action) -> Action {
-    // FlowContext is a persistent side panel. Normalize every manual hide or
-    // toggle request to Show so stale shortcut events, wake-state replay and
-    // tray misclicks cannot move the main panel offscreen.
-    Action::Show
+pub(crate) const fn manual_panel_action(requested: Action) -> Action {
+    requested
 }
 
 pub fn hide_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
-    apply_stable_panel_action(window, settings, stable_panel_action(Action::Hide))
+    apply_manual_panel_action(window, settings, manual_panel_action(Action::Hide))
 }
 
 pub fn toggle_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
-    apply_stable_panel_action(window, settings, stable_panel_action(Action::Hide))
+    let mut port = TauriRuntimePort::new(window.clone(), settings);
+    let monitor = port.selected_monitor()?;
+    let controller = port.controller();
+    let mut window_port = TauriWindowPort { window };
+    controller
+        .toggle(&mut window_port, monitor)
+        .map_err(|error| error.to_string())
 }
 
-fn apply_stable_panel_action<R: tauri::Runtime>(
+fn apply_manual_panel_action<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
     action: Action,

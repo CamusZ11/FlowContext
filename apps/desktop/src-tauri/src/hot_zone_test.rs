@@ -34,16 +34,44 @@ fn shows_only_after_150_ms_inside_two_pixel_edge() {
 }
 
 #[test]
-fn visible_panel_never_auto_hides_when_cursor_moves_or_state_rerenders() {
+fn visible_panel_hides_only_after_pointer_enters_then_leaves() {
     let mut engine = HotZoneEngine::new(2.0, 150, 0);
-    for (now, cursor) in [
-        (0, point(1800.0, 500.0)),
-        (25, point(100.0, 100.0)),
-        (1_000, point(1919.0, 500.0)),
-        (30_000, point(-500.0, -500.0)),
-    ] {
-        assert_eq!(engine.sample(now, cursor, monitor(), visible_window()), vec![]);
-    }
+
+    assert_eq!(
+        engine.sample(0, point(100.0, 100.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(25, point(1800.0, 500.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(50, point(100.0, 100.0), monitor(), visible_window()),
+        vec![Action::Hide]
+    );
+    assert_eq!(
+        engine.sample(75, point(100.0, 100.0), monitor(), visible_window()),
+        vec![]
+    );
+}
+
+#[test]
+fn missing_window_bounds_never_triggers_auto_hide() {
+    let mut engine = HotZoneEngine::new(2.0, 150, 0);
+    let visible_without_bounds = WindowState {
+        visible: true,
+        animating: false,
+        bounds: None,
+    };
+
+    assert_eq!(
+        engine.sample(0, point(1800.0, 500.0), monitor(), visible_without_bounds),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(25, point(100.0, 100.0), monitor(), visible_without_bounds),
+        vec![]
+    );
 }
 
 #[test]
@@ -108,7 +136,7 @@ fn ignores_duplicate_actions_while_window_is_animating() {
 }
 
 #[test]
-fn manual_hide_resets_edge_trigger_for_the_next_show_cycle() {
+fn manual_hide_while_pointer_stays_on_edge_does_not_reopen_panel() {
     let mut engine = HotZoneEngine::new(2.0, 150, 0);
     assert_eq!(
         engine.sample(0, point(1919.0, 500.0), monitor(), hidden()),
@@ -123,7 +151,36 @@ fn manual_hide_resets_edge_trigger_for_the_next_show_cycle() {
         vec![]
     );
     assert_eq!(
-        engine.sample(250, point(1900.0, 500.0), monitor(), hidden()),
+        engine.sample(250, point(1919.0, 500.0), monitor(), hidden()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(1_000, point(1919.0, 500.0), monitor(), hidden()),
+        vec![]
+    );
+}
+
+#[test]
+fn leaving_and_reentering_edge_after_hide_starts_a_new_show_cycle() {
+    let mut engine = HotZoneEngine::new(2.0, 150, 0);
+    assert_eq!(
+        engine.sample(0, point(1919.0, 500.0), monitor(), hidden()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(150, point(1919.0, 500.0), monitor(), hidden()),
+        vec![Action::Show]
+    );
+    assert_eq!(
+        engine.sample(200, point(1800.0, 500.0), monitor(), visible_window()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(250, point(1919.0, 500.0), monitor(), hidden()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(275, point(1900.0, 500.0), monitor(), hidden()),
         vec![]
     );
     assert_eq!(
