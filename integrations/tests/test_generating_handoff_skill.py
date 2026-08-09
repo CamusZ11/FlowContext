@@ -28,6 +28,13 @@ def test_persistence_happens_after_confirmation() -> None:
     assert skill_text.index("展示 Handoff 草稿") < skill_text.index("写入云数据库")
 
 
+def test_handoff_does_not_create_or_reopen_a_codex_session() -> None:
+    skill_text = SKILL.read_text(encoding="utf-8")
+    assert "Handoff 本身不创建新的 Codex Session" in skill_text
+    assert "不得用旧 thread 冒充新 Session" in skill_text
+    assert "以新的 Codex thread ID 创建新的 Session" not in skill_text
+
+
 def test_persist_wrapper_retries_same_fixture_idempotently(tmp_path: Path) -> None:
     fake_cli = tmp_path / "flowcontext"
     fake_cli.write_text(

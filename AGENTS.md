@@ -3,14 +3,14 @@
 - 本目录是 FlowContext 的独立源码根，只保存当前有效的源码、配置、测试和运行入口
 - Obsidian 项目 Context 位于 `/Users/camus/All_in_Context/03_项目/00_收集箱/FlowContext`，不把源码复制回 Vault
 - JavaScript/TypeScript 使用 `pnpm`；功能与修复遵守测试先行
-- 不写入 Secret、Token、Supabase 实际 Key 或个人凭据；只提交示例配置
+- 不写入 Secret、Token、数据库连接串或个人凭据；只提交示例配置
 - 不增加本地业务 SQLite；本机只保存设备偏好与登录会话
 - 第一版暂不处理备份、签名、公证和自动更新
 - 调试或验收 macOS 原生浮窗、热区、全屏 Space 或不抢焦点行为时，必须使用 `$macos-desktop-overlay-validation`，把自动化、构建、运行和实机矩阵分开记录
 ## 目录职责
 - `apps/`：共享 Web 前端与 Tauri 桌面应用
 - `packages/`：领域模型、数据访问与 Daily Note 投影
-- `supabase/`：数据库迁移、RLS、Edge Function 与测试
+- `apps/api/`：自托管 PostgreSQL schema、HTTP API、设备登记与 API 测试
 - `tools/`：Codex CLI 与投影同步工具
 - `integrations/`：Session/Handoff 集成及其测试
 - `tests/`：工作区结构与跨组件固定样例

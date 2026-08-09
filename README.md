@@ -1,38 +1,33 @@
 # FlowContext
-FlowContext 是 macOS 与 Windows 共用的个人工作上下文浮窗：显示当天 Daily Note、Topic 连续性和按计划执行时间排序的 To-do，并可通过 Codex Deep Link 恢复任务。
-## 当前范围
-- Web 与 Tauri 共用 React 前端
-- 用户自有 PostgreSQL 与 FlowContext API 保存 Topic Card、Session、Handoff 与 To-do；Obsidian 继续保存 Project 事实
-- 桌面端提供托盘、快捷键、所选显示器右侧 2 px 热区和 150 ms 唤出
-- 鼠标位于浮窗内时保持显示，移出后在下一次 25 ms 采样隐藏
-- macOS 普通桌面版本可运行；原生全屏 Space 覆盖仍待修复
-- Windows 构建、安装和真实多显示器验收尚未完成
+FlowContext 是 macOS 与 Windows 共用的个人工作上下文浮窗：显示当天 To-do、Topic 连续性与 Daily Note 投影，并能从当前设备继续 Codex 任务。
+## 当前运行方式
+- `apps/api` 是唯一生产数据服务：用户自有 PostgreSQL + HTTPS API；设备以一次性注册码登记，令牌只保存在系统受保护存储。
+- Obsidian 保存 Project 的长期事实；API 保存 Topic Card、Session、Handoff、To-do、Daily Projection 与设备工作区映射。
+- macOS 版支持托盘、`CommandOrControl+Shift+Space`、所选显示器右侧 2 px 热区和原生全屏应用之上的非激活浮层。
+- Windows 构建、安装及多显示器实机验收仍待完成。
 ## 目录
-- `apps/desktop`：Tauri 桌面壳与原生窗口逻辑
-- `apps/web`：登录、Daily Note、Topic 和 To-do 界面
-- `apps/api`：自托管 PostgreSQL schema、HTTP API 与设备登记
-- `packages`：共享领域与数据层
-- `supabase`：迁移完成前保留的历史 schema 与测试，不再作为生产运行时
-- `tools`：Codex CLI、投影同步与一次性数据迁移工具
-- `integrations`：Session/Handoff 集成
-## 开始
+- `apps/api`：自托管 API、PostgreSQL schema、设备登记与集成测试。
+- `apps/desktop`：Tauri 桌面壳、热区、原生窗口、托盘与安全存储。
+- `apps/web`：无密码设备登记、To-do、Topic、Daily Note 界面。
+- `packages`：共享领域、HTTP 仓储与 Obsidian 投影。
+- `deploy/flowcontext`：服务器部署和日常运维入口。
+- `tools`：Codex CLI 与 Obsidian 投影同步。
+- `integrations`：FlowContext Session 与 Handoff Skills 及测试。
+## 本地开发
 ```bash
 pnpm install
 pnpm verify
 pnpm --filter @flowcontext/desktop tauri dev
 ```
-浏览器开发需从 `.env.example` 创建本机 `.env.local`，配置 `VITE_FLOWCONTEXT_PROVIDER=self-hosted` 与 `VITE_FLOWCONTEXT_API_URL`；不要提交实际 URL 或凭据。桌面端也可使用应用内本机配置。
-## 一次性数据迁移
-迁移工具只处理 `project_projections`、`topic_cards`、`sessions`、`handoffs`、`todos`、`daily_projections`、`device_workspaces` 七张业务表，不导出认证用户、会话、设备 token 或服务器密钥。连接信息必须放在用户明确提供且未被 Git 跟踪的本机 env 文件中：
+从 `.env.example` 创建本机 `apps/web/.env`，配置：
 ```dotenv
-FLOWCONTEXT_SOURCE_DATABASE_URL=postgresql://...
-FLOWCONTEXT_TARGET_DATABASE_URL=postgresql://...
+VITE_FLOWCONTEXT_PROVIDER=self-hosted
+VITE_FLOWCONTEXT_API_URL=https://your-flowcontext-api.example
 ```
-```bash
-pnpm flowcontext-migrate export --env-file .env.migration --output flowcontext-migration
-pnpm flowcontext-migrate import --env-file .env.migration --input flowcontext-migration
-pnpm flowcontext-migrate verify --env-file .env.migration --input flowcontext-migration
-```
-导出目录内是七个 NDJSON 文件与 `manifest.json`，文件权限为 `0600`。导入默认只接受空目标；`--replace-empty-target` 仍要求目标数据库显式设置 `flowcontext.disposable_target=true`，只应用于可丢弃环境。切换设备后应重新登记并签发新设备凭据。
+实际 URL、设备令牌、注册码和数据库连接串不得写入 Git。
+## 部署与验收
+- 服务器部署与设备管理见 [`deploy/flowcontext/README.md`](deploy/flowcontext/README.md)。
+- 当前运行边界、常规检查和故障排查见 [`docs/self-hosted-operations.md`](docs/self-hosted-operations.md)。
+- 桌面端人工验收见 [`apps/desktop/tests/acceptance-checklist.md`](apps/desktop/tests/acceptance-checklist.md)。
 ## 项目上下文
-状态、关键判断与详细 Handoff 位于：`/Users/camus/All_in_Context/03_项目/00_收集箱/FlowContext`。
+状态、关键判断与当前 Handoff 位于 `/Users/camus/All_in_Context/03_项目/00_收集箱/FlowContext`。

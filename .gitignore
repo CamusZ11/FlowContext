@@ -7,9 +7,9 @@ target/
 apps/desktop/src-tauri/gen/
 coverage/
 .turbo/
+.DS_Store
+**/__pycache__/
+test-results/
 .env
 .env.*
 !.env.example
-supabase/.branches/
-supabase/.temp/
-flowcontext-migration/

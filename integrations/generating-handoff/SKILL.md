@@ -7,13 +7,17 @@ description: 在用户确认后生成不可变 FlowContext Handoff，并保护 T
 ## 触发与语义
 - “放一放”和“收工”是同一 Handoff 触发词，语义完全相同；两者都只开始交接草稿流程。
 - 触发词本身不代表主题完成，不代表 Topic Card done，也不改变 Project 生命周期。
+## Session 与继续边界
+- Handoff 本身不创建新的 Codex Session，也不复开现有 Codex thread；它只冻结当前 Session 的交接内容并更新 Topic 连续性。
+- 新会话的路由与登记由任务启动时的 `flowcontext-session` Skill 负责；Handoff 不承担跨会话启动职责。
+- 不得用旧 thread 冒充新 Session。
 ## 流程
 1. 先确认本任务已经运行 `flowcontext-session`，并取得其保存的 Project、Topic Card 与 Session ID；没有唯一绑定时不得写入，必须先完成路由或向用户澄清。
 2. 使用当前 Session 的绑定 Topic Card，整理已完成、当前状态、停止点、下一步、开放问题和需要用户确认的事实。
 3. 展示 Handoff 草稿，等待用户明确确认或修正。未确认时不得调用写入命令。
 4. 确认后将正文写入临时 JSON 文件，使用稳定的 `idempotencyKey` 调用 `persist-handoff.sh`；不得把正文放在命令参数或 shell history。JSON 必须含 `sessionId`、`topicCardId`、`content`、`idempotencyKey`，可含 `topicUpdate.currentState`、`topicUpdate.nextAction` 与 `topicUpdate.openQuestions`。
 5. 云端通过单个原子写入校验 `Session -> Topic Card -> Project` 归属后，插入不可变 Handoff，并同步更新允许的 Topic 连续性字段；不得传入或修改 Project ID、Topic state、`latestHandoffId` 或 `lastActiveAt`，后两项由数据库维护。
-6. 写入云数据库成功后只输出 Handoff ID、Topic/Session ID 和成功状态，不输出完整正文或 token。重试沿用同一个幂等标识。
+6. 写入云数据库成功后只输出 Handoff ID、Topic/Session ID 和成功状态，不输出完整正文或 token。该成功不代表已创建新的 Codex Session；重试沿用同一个幂等标识。
 7. Project 层事实必须另行展示 Obsidian 同步草稿，得到独立确认后才写回 Obsidian。
 ## done 保护
 - 只有用户明确表达主题结束、完成或关闭时，才允许调用显式 Topic 完成 API。

@@ -23,6 +23,14 @@ def test_uncertain_routing_requires_question() -> None:
     assert "不确定时先询问" in skill_text or "必须先询问用户" in skill_text
 
 
+def test_new_codex_thread_continues_the_unique_open_topic() -> None:
+    skill_text = SKILL.read_text(encoding="utf-8")
+    assert "继续此主题" in skill_text
+    assert "复用该开放 Topic Card" in skill_text
+    assert "以新的 Codex thread ID 创建新的 Session" in skill_text
+    assert "不得仅以工作区路径新建 Project 或 Topic Card" in skill_text
+
+
 def test_register_script_uses_json_file_and_registers_one_session(tmp_path: Path) -> None:
     fake_cli = tmp_path / "flowcontext"
     fake_cli.write_text(

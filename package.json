@@ -7,7 +7,6 @@
     "api:migrate": "pnpm --filter @flowcontext/api migrate",
     "api:test": "pnpm --filter @flowcontext/api test",
     "api:typecheck": "pnpm --filter @flowcontext/api typecheck",
-    "flowcontext-migrate": "node tools/self-hosted-migration/src/index.ts",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
