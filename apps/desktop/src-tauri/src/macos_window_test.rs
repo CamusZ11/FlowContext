@@ -2,10 +2,11 @@ use super::macos_window::fullscreen_overlay_behavior;
 use objc2_app_kit::NSWindowCollectionBehavior;
 
 #[test]
-fn fullscreen_overlay_joins_all_spaces_and_preserves_existing_behavior() {
+fn fullscreen_overlay_joins_other_app_fullscreen_spaces_with_one_role() {
     let current = NSWindowCollectionBehavior::Stationary;
     let actual = fullscreen_overlay_behavior(current);
     assert!(actual.contains(NSWindowCollectionBehavior::CanJoinAllSpaces));
+    assert!(actual.contains(NSWindowCollectionBehavior::CanJoinAllApplications));
     assert!(actual.contains(NSWindowCollectionBehavior::FullScreenAuxiliary));
     assert!(actual.contains(NSWindowCollectionBehavior::Stationary));
 }

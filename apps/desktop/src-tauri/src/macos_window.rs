@@ -11,8 +11,26 @@ pub fn fullscreen_overlay_behavior(
     current: NSWindowCollectionBehavior,
 ) -> NSWindowCollectionBehavior {
     current
+        .difference(
+            NSWindowCollectionBehavior::Primary
+                | NSWindowCollectionBehavior::Auxiliary
+                | NSWindowCollectionBehavior::CanJoinAllApplications,
+        )
+        .difference(
+            NSWindowCollectionBehavior::FullScreenPrimary
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::FullScreenNone,
+        )
+        .difference(
+            NSWindowCollectionBehavior::Managed
+                | NSWindowCollectionBehavior::Transient
+                | NSWindowCollectionBehavior::Stationary
+                | NSWindowCollectionBehavior::MoveToActiveSpace,
+        )
         | NSWindowCollectionBehavior::CanJoinAllSpaces
+        | NSWindowCollectionBehavior::CanJoinAllApplications
         | NSWindowCollectionBehavior::FullScreenAuxiliary
+        | NSWindowCollectionBehavior::Stationary
 }
 
 #[cfg(target_os = "macos")]
