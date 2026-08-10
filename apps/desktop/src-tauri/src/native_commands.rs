@@ -9,6 +9,19 @@ const KEYRING_SERVICE: &str = "com.camus.flowcontext.auth.v2";
 const AUTH_STATE_FILE: &str = "auth-state.json";
 const DEVICE_TOKEN_CLEAR_INTENT_KEY: &str = "device-token-clear-pending";
 
+pub const fn runtime_platform() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "macos"
+    }
+}
+
+#[tauri::command]
+pub fn get_runtime_platform() -> &'static str {
+    runtime_platform()
+}
+
 pub fn secure_storage_service() -> &'static str {
     KEYRING_SERVICE
 }
@@ -23,13 +36,14 @@ pub fn validate_codex_link(value: &str) -> Result<(), String> {
     }
     match url.host_str() {
         Some("threads")
-            if url
-                .path_segments()
-                .is_some_and(|mut segments| segments.any(|part| !part.is_empty())) =>
+            if url.path_segments().is_some_and(|segments| {
+                let parts = segments.filter(|part| !part.is_empty()).collect::<Vec<_>>();
+                parts.len() == 1 && !parts[0].trim().is_empty()
+            }) =>
         {
             Ok(())
         }
-        Some("new") => Ok(()),
+        Some("new") if url.path() == "/" || url.path().is_empty() => Ok(()),
         _ => Err("unsupported codex link".to_owned()),
     }
 }
@@ -39,6 +53,71 @@ pub fn secure_storage_key(key: &str) -> Result<String, String> {
         return Err("invalid secure storage key".to_owned());
     }
     Ok(format!("flowcontext:{key}"))
+}
+
+pub trait ExternalLauncher {
+    fn launch(&self, url: &str) -> Result<(), String>;
+}
+
+struct TauriExternalLauncher<'a> {
+    app: &'a AppHandle<Wry>,
+}
+
+impl ExternalLauncher for TauriExternalLauncher<'_> {
+    fn launch(&self, url: &str) -> Result<(), String> {
+        self.app
+            .opener()
+            .open_url(url, None::<String>)
+            .map_err(|error| error.to_string())
+    }
+}
+
+pub fn launch_codex_link<L: ExternalLauncher>(launcher: &L, url: &str) -> Result<(), String> {
+    validate_codex_link(url)?;
+    launcher
+        .launch(url)
+        .map_err(|_| "无法打开 Codex。请确认已安装可处理 codex:// 的应用后重试。".to_owned())
+}
+
+#[cfg(feature = "ci-mock-launcher")]
+fn test_launch_url(args: &[String]) -> Option<&str> {
+    args.windows(2)
+        .find(|pair| pair[0] == "--flowcontext-test-launch")
+        .map(|pair| pair[1].as_str())
+}
+
+#[cfg(feature = "ci-mock-launcher")]
+pub fn handle_ci_mock_launcher(args: &[String]) -> Result<bool, String> {
+    let Some(url) = test_launch_url(args) else {
+        return Ok(false);
+    };
+    validate_codex_link(url)?;
+    let kind = match Url::parse(url)
+        .ok()
+        .and_then(|value| value.host_str().map(str::to_owned))
+    {
+        Some(host) if host == "threads" => "threads",
+        Some(host) if host == "new" => "new",
+        _ => return Err("unsupported codex test route".to_owned()),
+    };
+    let path = std::env::var("FLOWCONTEXT_EXTERNAL_LAUNCHER_LOG")
+        .map_err(|_| "mock launcher log path is not configured".to_owned())?;
+    if std::env::var("FLOWCONTEXT_EXTERNAL_LAUNCHER").as_deref() != Ok("mock") {
+        return Err("mock launcher is not enabled".to_owned());
+    }
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    writeln!(file, "{kind}").map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[cfg(not(feature = "ci-mock-launcher"))]
+pub fn handle_ci_mock_launcher(_args: &[String]) -> Result<bool, String> {
+    Ok(false)
 }
 
 fn entry(key: &str) -> Result<Entry, String> {
@@ -118,8 +197,5 @@ pub fn device_token_clear_intent_remove(app: AppHandle<Wry>) -> Result<(), Strin
 
 #[tauri::command]
 pub fn open_codex_link(app: AppHandle<Wry>, url: String) -> Result<(), String> {
-    validate_codex_link(&url)?;
-    app.opener()
-        .open_url(url, None::<String>)
-        .map_err(|error| error.to_string())
+    launch_codex_link(&TauriExternalLauncher { app: &app }, &url)
 }

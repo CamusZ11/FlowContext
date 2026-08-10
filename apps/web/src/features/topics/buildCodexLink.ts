@@ -28,7 +28,9 @@ function contextOf(input: TopicLinkInput) {
 export function buildCodexLink(input: TopicLinkInput): string | null {
   const { latestHandoff, threadId, workspacePath } = contextOf(input);
   if (!latestHandoff && threadId) return `codex://threads/${encodeURIComponent(threadId)}`;
-  if (!latestHandoff || !workspacePath) return null;
+  // A handoff can create a task only in the current Windows workspace. macOS
+  // deliberately remains read-only for this cross-device continuation path.
+  if (!latestHandoff || !workspacePath || input.currentWorkspace?.platform !== "windows") return null;
 
   const prompt = [
     `继续主题：${input.title}`,

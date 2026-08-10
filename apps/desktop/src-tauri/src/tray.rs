@@ -81,8 +81,7 @@ pub fn install<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             "settings" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let saved = crate::settings::load(app).unwrap_or_default();
-                    let _ = crate::runtime::show_panel(window.clone(), saved);
-                    let _ = window.set_focus();
+                    let _ = crate::runtime::show_panel_interactive(window.clone(), saved);
                     let _ = window.emit("flowcontext:open-settings", ());
                 }
             }

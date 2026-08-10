@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { DeviceWorkspace, TopicCard as TopicCardType } from "@flowcontext/domain";
 import { buildCodexLink, topicNeedsWorkspace, type TopicLinkInput } from "./buildCodexLink";
 import { ArrowRightIcon, CheckIcon } from "../../ui/icons";
@@ -9,6 +10,7 @@ export interface TopicCardProps {
 }
 
 export function TopicCardView({ topic, currentWorkspace = null, onOpen }: TopicCardProps) {
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const input: TopicLinkInput = { ...topic, currentWorkspace: currentWorkspace ?? (topic as TopicLinkInput).currentWorkspace };
   const link = buildCodexLink(input);
   const missingWorkspace = topicNeedsWorkspace(input);
@@ -28,10 +30,15 @@ export function TopicCardView({ topic, currentWorkspace = null, onOpen }: TopicC
           type="button"
           className="topic-action-button"
           disabled={disabled}
-          onClick={() => { if (link) void onOpen(link); }}
+          onClick={() => {
+            if (!link) return;
+            setLaunchError(null);
+            void onOpen(link).catch(() => setLaunchError("未能打开 Codex。请确认已安装可处理 codex:// 的应用后重试。"));
+          }}
         >
           <span>{link?.startsWith("codex://threads/") ? "打开当前任务" : "继续此主题"}</span><ArrowRightIcon width="18" height="18" />
         </button>
+        {launchError ? <p role="alert" className="error-text">{launchError}</p> : null}
       </div>
     </article>
   );

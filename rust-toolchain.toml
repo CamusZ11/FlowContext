@@ -1,0 +1,6 @@
+[toolchain]
+# Verified by the first Windows MSVC cargo-test and Release NSIS build. The
+# locked serde_with/time releases require Rust 1.88.0 and the Rust 2024 edition.
+channel = "1.88.0"
+targets = ["x86_64-pc-windows-msvc"]
+profile = "minimal"

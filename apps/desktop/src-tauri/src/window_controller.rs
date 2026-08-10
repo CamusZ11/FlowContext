@@ -1,4 +1,5 @@
-use crate::hot_zone::MonitorRect;
+use crate::display_geometry::DisplayGeometry;
+use crate::platform_window::{ShowIntent, WindowPlacement};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -7,13 +8,13 @@ pub enum WindowControllerError {
     Operation(String),
 }
 
+/// The window-controller knows only user intent and platform-neutral physical
+/// rectangles. Native APIs live behind `platform_window`, keeping Windows from
+/// inheriting any macOS-specific fullscreen or menu-bar behavior.
 pub trait WindowPort {
     fn prepare_overlay(&mut self) -> Result<(), String>;
-    fn set_physical_size(&mut self, width: f64, height: f64) -> Result<(), String>;
-    fn set_physical_position(&mut self, x: f64, y: f64) -> Result<(), String>;
-    fn set_always_on_top(&mut self, value: bool) -> Result<(), String>;
-    fn show(&mut self) -> Result<(), String>;
-    fn hide(&mut self) -> Result<(), String>;
+    fn place_and_show(&mut self, placement: WindowPlacement) -> Result<(), String>;
+    fn hide_at(&mut self, x: f64, y: f64) -> Result<(), String>;
     fn is_visible(&self) -> bool;
 }
 
@@ -26,8 +27,6 @@ pub struct WindowController {
 }
 
 impl WindowController {
-    const TOP_SAFE_INSET_POINTS: f64 = 28.0;
-
     pub const fn new(saved_width: f64, min_width: f64, max_width: f64) -> Self {
         Self {
             saved_width,
@@ -48,45 +47,46 @@ impl WindowController {
     pub fn show<W: WindowPort>(
         &self,
         window: &mut W,
-        monitor: MonitorRect,
+        display: &DisplayGeometry,
     ) -> Result<(), WindowControllerError> {
-        let scale = monitor.scale_factor.max(0.0001);
-        let width = self.width() * scale;
-        let top_inset = Self::TOP_SAFE_INSET_POINTS * scale;
-        let height = (monitor.height - top_inset).max(1.0);
-        let x = monitor.right() - width;
-        let y = monitor.y + top_inset;
+        self.show_with_intent(window, display, ShowIntent::Passive)
+    }
+
+    pub fn show_with_intent<W: WindowPort>(
+        &self,
+        window: &mut W,
+        display: &DisplayGeometry,
+        intent: ShowIntent,
+    ) -> Result<(), WindowControllerError> {
+        let placement = WindowPlacement::new(display.panel_bounds(self.width()), intent);
         window
-            .set_physical_size(width, height)
-            .and_then(|_| window.set_physical_position(x, y))
-            .and_then(|_| window.set_always_on_top(true))
-            .and_then(|_| window.prepare_overlay())
-            .and_then(|_| window.show())
+            .prepare_overlay()
+            .and_then(|_| window.place_and_show(placement))
             .map_err(WindowControllerError::Operation)
     }
 
     pub fn hide<W: WindowPort>(
         &self,
         window: &mut W,
-        monitor: MonitorRect,
+        display: &DisplayGeometry,
     ) -> Result<(), WindowControllerError> {
-        let x = monitor.right();
-        let y = monitor.y;
         window
-            .set_physical_position(x, y)
-            .and_then(|_| window.hide())
+            .hide_at(
+                display.monitor_bounds.x + display.monitor_bounds.width,
+                display.monitor_bounds.y,
+            )
             .map_err(WindowControllerError::Operation)
     }
 
     pub fn toggle<W: WindowPort>(
         &self,
         window: &mut W,
-        monitor: MonitorRect,
+        display: &DisplayGeometry,
     ) -> Result<(), WindowControllerError> {
         if window.is_visible() {
-            self.hide(window, monitor)
+            self.hide(window, display)
         } else {
-            self.show(window, monitor)
+            self.show(window, display)
         }
     }
 }

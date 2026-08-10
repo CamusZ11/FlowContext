@@ -39,14 +39,17 @@ function localIsoDate(now: () => Date): string {
 function nativeDeviceId(): string {
   const cryptoApi = globalThis.crypto;
   if (typeof cryptoApi?.randomUUID === "function") return cryptoApi.randomUUID();
-  if (typeof cryptoApi?.getRandomValues === "function") {
-    const bytes = cryptoApi.getRandomValues(new Uint8Array(16));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
-    return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
-  }
-  return `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const bytes = typeof cryptoApi?.getRandomValues === "function"
+    ? cryptoApi.getRandomValues(new Uint8Array(16))
+    : Uint8Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return hex.slice(0, 4).join("")
+    + "-" + hex.slice(4, 6).join("")
+    + "-" + hex.slice(6, 8).join("")
+    + "-" + hex.slice(8, 10).join("")
+    + "-" + hex.slice(10, 16).join("");
 }
 
 function nativeDevicePlatform(): "macos" | "windows" {
@@ -55,11 +58,16 @@ function nativeDevicePlatform(): "macos" | "windows" {
     : "macos";
 }
 
+function asRuntimePlatform(value: unknown): "macos" | "windows" | null {
+  return value === "macos" || value === "windows" ? value : null;
+}
+
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
 const DEVICE_TOKEN_KEY = "flowcontext.device-token";
+const API_DEVICE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEVICE_TOKEN_DELETE_TOMBSTONE = "__flowcontext_device_token_delete_pending_v1__";
 const DEVICE_TOKEN_CLEAR_INTENT_GET = "device_token_clear_intent_get";
 const DEVICE_TOKEN_CLEAR_INTENT_SET = "device_token_clear_intent_set";
@@ -80,6 +88,21 @@ function createMemorySessionStorage(): SessionStoragePort {
  */
 function createFallbackSessionStorage(): SessionStoragePort {
   return createMemorySessionStorage();
+}
+
+async function hasDeviceTokenForIdentityMigration(
+  invoke: TauriInvoke,
+  fallbackStorage: SessionStoragePort,
+): Promise<boolean> {
+  try {
+    if (await invoke(DEVICE_TOKEN_CLEAR_INTENT_GET) === true) {
+      return Boolean(await fallbackStorage.get(DEVICE_TOKEN_KEY));
+    }
+    const nativeValue = asString(await invoke("secure_storage_get", { key: DEVICE_TOKEN_KEY }));
+    return Boolean(nativeValue && nativeValue !== DEVICE_TOKEN_DELETE_TOMBSTONE);
+  } catch {
+    return Boolean(await fallbackStorage.get(DEVICE_TOKEN_KEY));
+  }
 }
 
 export function createTauriSessionStorage(
@@ -176,12 +199,15 @@ export function createTauriSessionStorage(
   };
 }
 
-function isCodexDeepLink(value: string): boolean {
+export function isCodexDeepLink(value: string): boolean {
   try {
     const url = new URL(value);
-    if (url.protocol !== "codex:") return false;
-    if (url.hostname === "threads") return Boolean(url.pathname.replace(/^\//, ""));
-    return url.hostname === "new";
+    if (url.protocol !== "codex:" || url.username || url.password || url.port) return false;
+    if (url.hostname === "threads") {
+      const segments = url.pathname.split("/").filter(Boolean);
+      return segments.length === 1 && segments[0].trim().length > 0;
+    }
+    return url.hostname === "new" && (url.pathname === "" || url.pathname === "/");
   } catch {
     return false;
   }
@@ -189,16 +215,23 @@ function isCodexDeepLink(value: string): boolean {
 
 export async function createTauriPlatform(options: TauriPlatformOptions): Promise<PlatformPort> {
   const now = options.now ?? (() => new Date());
-  const storage = createTauriSessionStorage(options.invoke, options.fallbackStorage);
+  const fallbackStorage = options.fallbackStorage ?? createFallbackSessionStorage();
+  const storage = createTauriSessionStorage(options.invoke, fallbackStorage);
+  const detectedPlatform = asRuntimePlatform(await options.invoke("get_runtime_platform").catch(() => null));
   let deviceId = asString(await storage.get("device-id"));
-  if (!deviceId) {
+  const needsMigration = Boolean(deviceId && !API_DEVICE_ID_PATTERN.test(deviceId));
+  const deviceTokenPresent = needsMigration
+    ? await hasDeviceTokenForIdentityMigration(options.invoke, fallbackStorage)
+    : false;
+  if (!deviceId || (needsMigration && !deviceTokenPresent)) {
     deviceId = (options.createDeviceId ?? nativeDeviceId)();
     await storage.set("device-id", deviceId);
   }
 
   return {
     mode: "desktop",
-    devicePlatform: options.devicePlatform ?? nativeDevicePlatform(),
+    // Registration uses the Rust compile target rather than the WebView UA.
+    devicePlatform: options.devicePlatform ?? detectedPlatform ?? nativeDevicePlatform(),
     deviceId,
     today: () => localIsoDate(now),
     openExternal: async (url) => {

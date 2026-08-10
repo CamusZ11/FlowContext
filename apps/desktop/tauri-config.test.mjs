@@ -40,3 +40,29 @@ test("desktop uses only the manual FlowContext tray icon", async () => {
   assert.equal(config.app.trayIcon, undefined);
   assert.match(traySource, /TrayIconBuilder::with_id\("flowcontext"\)/);
 });
+
+test("Windows release overlay starts hidden with a current-user NSIS installer", async () => {
+  const config = JSON.parse(
+    await readFile(new URL("./src-tauri/tauri.windows.conf.json", import.meta.url), "utf8"),
+  );
+
+  assert.equal(config.app.windows[0].visible, false);
+  assert.equal(config.app.windows[0].focus, false);
+  assert.equal(config.app.windows[0].skipTaskbar, true);
+  assert.equal(config.app.windows[0].decorations, false);
+  assert.equal(config.app.windows[0].maximizable, false);
+  assert.deepEqual(config.bundle.targets, ["nsis"]);
+  assert.equal(config.bundle.windows.nsis.installMode, "currentUser");
+  assert.equal(config.bundle.windows.webviewInstallMode.type, "offlineInstaller");
+});
+
+test("Windows CI uses the pinned MSVC toolchain and uploads redacted smoke evidence", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/windows-desktop.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /toolchain: 1\.88\.0/);
+  assert.match(workflow, /x86_64-pc-windows-msvc/);
+  assert.match(workflow, /ci-mock-launcher/);
+  assert.match(workflow, /artifacts-smoke\.redacted\.log/);
+});

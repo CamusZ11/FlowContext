@@ -192,3 +192,25 @@ fn leaving_and_reentering_edge_after_hide_starts_a_new_show_cycle() {
         vec![Action::Show]
     );
 }
+
+#[test]
+fn disabling_hot_zone_immediately_clears_the_dwell_timer() {
+    let mut engine = HotZoneEngine::new(2.0, 150, 0);
+    assert_eq!(
+        engine.sample(0, point(1919.0, 500.0), monitor(), hidden()),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(
+            149,
+            point(1919.0, 500.0),
+            monitor().with_enabled(false),
+            hidden()
+        ),
+        vec![]
+    );
+    assert_eq!(
+        engine.sample(150, point(1919.0, 500.0), monitor(), hidden()),
+        vec![]
+    );
+}

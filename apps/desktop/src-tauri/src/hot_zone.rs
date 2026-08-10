@@ -46,6 +46,7 @@ pub struct MonitorRect {
     /// Vertical portions of the selected monitor's right edge which are
     /// exposed to the desktop.  A default monitor exposes its full height.
     pub external_right_segments: Vec<(f64, f64)>,
+    pub enabled: bool,
 }
 
 impl MonitorRect {
@@ -61,11 +62,17 @@ impl MonitorRect {
                 1.0
             },
             external_right_segments: vec![(y, y + height)],
+            enabled: true,
         }
     }
 
     pub fn with_external_right_segments(mut self, segments: Vec<(f64, f64)>) -> Self {
         self.external_right_segments = segments;
+        self
+    }
+
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
         self
     }
 
@@ -174,6 +181,10 @@ impl HotZoneEngine {
         monitor: MonitorRect,
         window: WindowState,
     ) -> Vec<Action> {
+        if !monitor.enabled {
+            self.reset();
+            return Vec::new();
+        }
         if window.animating {
             return Vec::new();
         }
@@ -193,6 +204,16 @@ impl HotZoneEngine {
 
         self.last_window_visible = true;
         self.sample_visible(now, cursor, window.bounds)
+    }
+
+    pub fn reset(&mut self) {
+        self.entered_at = None;
+        self.left_at = None;
+        self.show_fired = false;
+        self.hide_fired = false;
+        self.pointer_has_entered_visible_panel = false;
+        self.last_window_visible = false;
+        self.require_edge_exit = false;
     }
 
     fn sample_hidden(&mut self, now: u64, cursor: Point, monitor: &MonitorRect) -> Vec<Action> {

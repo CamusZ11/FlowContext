@@ -1039,6 +1039,7 @@ dependencies = [
  "tauri-plugin-store",
  "thiserror 2.0.19",
  "url",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

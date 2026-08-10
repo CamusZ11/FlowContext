@@ -10,9 +10,10 @@ function fakeTauriScope() {
   return { __TAURI_INTERNALS__: { invoke: vi.fn() } };
 }
 
-function secureInvoke(initialDeviceId: string | null = null) {
+function secureInvoke(initialDeviceId: string | null = null, initialDeviceToken: string | null = null) {
   const values = new Map<string, string>();
   if (initialDeviceId) values.set("device-id", initialDeviceId);
+  if (initialDeviceToken) values.set("flowcontext.device-token", initialDeviceToken);
   const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
   const invoke: TauriInvoke = async (command, args) => {
     calls.push({ command, args });
@@ -49,6 +50,49 @@ describe("Tauri platform", () => {
     expect(platform.mode).toBe("desktop");
     expect(platform.devicePlatform).toBe("macos");
     expect(platform.today()).toBe("2026-08-03");
+  });
+
+  it("uses the native runtime platform instead of the WebView user agent", async () => {
+    const { invoke } = secureInvoke();
+    const platform = await createTauriPlatform({
+      invoke: async (command, args) => command === "get_runtime_platform" ? "windows" : invoke(command, args),
+      createDeviceId: () => "device-win-1",
+    });
+    expect(platform.devicePlatform).toBe("windows");
+  });
+
+  it("migrates a legacy invalid device ID before unregistered desktop enrollment", async () => {
+    const { invoke, values } = secureInvoke("legacy-device-id");
+    const platform = await createTauriPlatform({
+      invoke,
+      createDeviceId: () => "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725",
+    });
+
+    expect(platform.deviceId).toBe("5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725");
+    expect(values.get("device-id")).toBe("5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725");
+  });
+
+  it("keeps an API-compliant device ID unchanged", async () => {
+    const existingDeviceId = "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725";
+    const createDeviceId = vi.fn(() => "6c76f8f1-3e02-4d87-b648-2f2d66be2ec6");
+    const { invoke, values } = secureInvoke(existingDeviceId);
+
+    const platform = await createTauriPlatform({ invoke, createDeviceId });
+
+    expect(platform.deviceId).toBe(existingDeviceId);
+    expect(values.get("device-id")).toBe(existingDeviceId);
+    expect(createDeviceId).not.toHaveBeenCalled();
+  });
+
+  it("keeps a legacy device ID unchanged when a device token already exists", async () => {
+    const createDeviceId = vi.fn(() => "5d3e3ab4-2e5a-4d6e-a2fb-5d64d6a0e725");
+    const { invoke, values } = secureInvoke("legacy-device-id", "existing-session");
+
+    const platform = await createTauriPlatform({ invoke, createDeviceId });
+
+    expect(platform.deviceId).toBe("legacy-device-id");
+    expect(values.get("device-id")).toBe("legacy-device-id");
+    expect(createDeviceId).not.toHaveBeenCalled();
   });
 
   it("stores the device token through native secure storage, never browser localStorage", async () => {
@@ -328,6 +372,7 @@ describe("Tauri platform", () => {
       args: { url: "codex://threads/thread-1" },
     });
     await expect(platform.openExternal("https://example.com")).rejects.toThrow(/codex/i);
+    await expect(platform.openExternal("codex://threads/one/two")).rejects.toThrow(/codex/i);
   });
 
   it("selects desktop mode from the Tauri runtime without changing the web platform", async () => {

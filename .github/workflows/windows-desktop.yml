@@ -1,0 +1,72 @@
+name: Windows desktop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "apps/web/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/windows-desktop.yml"
+
+jobs:
+  build-and-smoke:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      CI: "true"
+      FLOWCONTEXT_TEST_API_URL: "https://fixture.invalid"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          targets: x86_64-pc-windows-msvc
+      - name: Create credential-free fixture environment
+        shell: pwsh
+        run: |
+          @(
+            'VITE_FLOWCONTEXT_PROVIDER=self-hosted'
+            'VITE_FLOWCONTEXT_API_URL=https://fixture.invalid'
+          ) | Set-Content -LiteralPath apps/web/.env -Encoding utf8
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify workspace
+        run: pnpm verify
+      - name: Test desktop Rust
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+      - name: Build NSIS release
+        run: pnpm --filter @flowcontext/desktop tauri build --features ci-mock-launcher --config src-tauri/tauri.windows.conf.json
+      - name: Installer smoke (mock Codex launcher)
+        shell: pwsh
+        run: ./apps/desktop/scripts/smoke-windows.ps1 -CodexMode Mock *>&1 | Tee-Object -FilePath artifacts-smoke.redacted.log
+      - name: Collect redacted evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($installer) { Get-FileHash -Algorithm SHA256 $installer.FullName | Format-List | Out-File artifacts-installer-sha256.txt -Encoding utf8 }
+          ./apps/desktop/scripts/doctor-windows.ps1 | Out-File artifacts-doctor.txt -Encoding utf8
+      - name: Upload installer and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-desktop-rc
+          if-no-files-found: warn
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            artifacts-installer-sha256.txt
+            artifacts-doctor.txt
+            artifacts-smoke.redacted.log
+            apps/desktop/tests/windows-acceptance-matrix.md

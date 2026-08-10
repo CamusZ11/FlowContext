@@ -56,6 +56,7 @@ export function DeviceEnrollmentForm({
       <p className="eyebrow">PRIVATE DEVICE</p>
       <h1 id="device-enrollment-heading">登记此设备</h1>
       <p className="muted">只需使用一次管理员提供的短时登记码，之后将静默验证此设备。</p>
+      <p className="device-identity">设备标识：{platform.deviceId}</p>
       {platform.mode === "web" ? (
         <p className="muted">浏览器凭据仅保存在当前会话中，仅供开发，不能用于生产。</p>
       ) : null}

@@ -1,17 +1,26 @@
+pub mod diagnostics;
+pub mod display_geometry;
 pub mod hot_zone;
 #[cfg(target_os = "macos")]
 pub mod macos_lifecycle;
 pub mod macos_window;
 pub mod monitor;
 pub mod native_commands;
+pub mod platform_window;
 pub mod plugins;
 pub mod runtime;
 pub mod settings;
 pub mod tray;
 pub mod window_controller;
+#[cfg(target_os = "windows")]
+pub mod windows_window;
 
 use std::sync::Mutex;
 
+#[cfg(test)]
+mod diagnostics_test;
+#[cfg(test)]
+mod display_geometry_test;
 #[cfg(test)]
 mod hot_zone_test;
 #[cfg(all(test, target_os = "macos"))]
@@ -62,6 +71,8 @@ pub fn run() {
             native_commands::secure_storage_get,
             native_commands::secure_storage_set,
             native_commands::secure_storage_remove,
+            native_commands::get_runtime_platform,
+            diagnostics::get_diagnostics,
             native_commands::device_token_clear_intent_get,
             native_commands::device_token_clear_intent_set,
             native_commands::device_token_clear_intent_remove,
@@ -69,10 +80,13 @@ pub fn run() {
         ])
         // This plugin must be registered first: a second launch focuses this
         // window and exits before constructing another store or runtime.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let saved = settings::load(app).unwrap_or_default();
                 let _ = runtime::show_panel(window, saved);
+            }
+            if let Err(error) = native_commands::handle_ci_mock_launcher(&args) {
+                eprintln!("FlowContext mock launcher handoff failed: {error}");
             }
         }))
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -93,10 +107,17 @@ pub fn run() {
 
             tray::install(&app.handle())?;
             let settings = settings::load(app.handle()).unwrap_or_default();
+            if let Err(error) = settings::install_shortcut(&app.handle(), &settings.shortcut) {
+                // A manually corrupted store must not make the desktop shell
+                // unusable. Settings writes validate shortcuts transactionally,
+                // so this is only a recovery path for an older local file.
+                eprintln!("FlowContext saved shortcut was invalid; using the default: {error}");
+                settings::install_shortcut(&app.handle(), settings::DEFAULT_SHORTCUT)?;
+            }
             let settings_state = settings::DeviceSettingsState::new(settings.clone());
             app.manage(settings_state.clone());
             if let Some(window) = app.get_webview_window("main") {
-                macos_window::prepare_fullscreen_overlay(&window)?;
+                platform_window::prepare_overlay(&window)?;
                 let port =
                     runtime::TauriRuntimePort::new_with_state(window.clone(), settings_state);
                 let sampling = runtime::SamplingRuntime::start(

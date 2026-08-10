@@ -1,4 +1,6 @@
 import type { FlowRepository } from "@flowcontext/data";
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppProviders } from "./AppProviders";
 import type { PlatformPort } from "../platform/PlatformPort";
 import { usePlatform } from "./PlatformContext";
@@ -12,6 +14,7 @@ import { ConnectionStatus } from "../features/daily/Disclosure";
 import { AuthGate } from "../features/auth/AuthGate";
 import type { AuthPort } from "../features/auth/useAuth";
 import { FlowContextMark, SyncedCloudIcon } from "../ui/icons";
+import { desktopRefreshQueryKeys } from "./desktopRefresh";
 
 export interface AppProps {
   mode?: "web" | "desktop";
@@ -35,6 +38,7 @@ export function App({ mode = "web", repository, platform, auth, authApiUrl }: Ap
 function AppContent({ mode, rolloverIdentity }: { mode: "web" | "desktop"; rolloverIdentity?: string }) {
   const platform = usePlatform();
   const [selectedDate, setSelectedDate] = useSelectedDate(mode, platform);
+  useDesktopAuthoritativeRefresh(mode, selectedDate);
   const projectionQuery = useDailyProjection(selectedDate);
   const connectionState = projectionQuery.isError ? "failed" : "synced" as const;
   const projection = projectionQuery.data ?? null;
@@ -61,4 +65,30 @@ function AppContent({ mode, rolloverIdentity }: { mode: "web" | "desktop"; rollo
       <ProjectGroups projection={projection} />
     </main>
   );
+}
+
+function useDesktopAuthoritativeRefresh(mode: "web" | "desktop", date: string) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (mode !== "desktop") return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) => listen("flowcontext:shown", () => {
+        for (const queryKey of desktopRefreshQueryKeys(date)) {
+          void queryClient.invalidateQueries({ queryKey });
+        }
+      }))
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      // A browser-served desktop bundle has no Tauri event bridge. It still
+      // receives ordinary query and SSE updates, without failing the UI.
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [date, mode, queryClient]);
 }

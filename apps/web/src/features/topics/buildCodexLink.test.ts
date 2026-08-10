@@ -27,8 +27,8 @@ describe("Codex deep links", () => {
         idempotencyKey: "idem-1",
       },
       currentWorkspace: {
-        deviceId: "mac-1",
-        platform: "macos",
+        deviceId: "windows-1",
+        platform: "windows",
         projectId: base.projectId,
         workspacePath: "/Users/camus/项目/Alpha",
       },
@@ -36,6 +36,18 @@ describe("Codex deep links", () => {
     expect(link).toContain("codex://new?");
     expect(new URL(link!).searchParams.get("path")).toBe("/Users/camus/项目/Alpha");
     expect(new URL(link!).searchParams.get("prompt")).toContain("下一步");
+  });
+
+  it("does not create a new task from a macOS workspace", () => {
+    expect(buildCodexLink({
+      ...base,
+      latestHandoff: {
+        id: "handoff-1", sessionId: "session-1", topicCardId: base.id, content: "等待继续", idempotencyKey: "idem-1",
+      },
+      currentWorkspace: {
+        deviceId: "mac-1", platform: "macos", projectId: base.projectId, workspacePath: "/Users/camus/FlowContext",
+      },
+    })).toBeNull();
   });
 
   it("does not guess a path from another device session", () => {

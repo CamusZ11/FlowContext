@@ -1,8 +1,10 @@
+use crate::display_geometry::DisplayGeometry;
 use crate::hot_zone::{Action, HotZoneEngine, MonitorRect, Point, WindowState};
 use crate::monitor::{
     monitor_options, resolve_selected_monitor, with_external_segments, MonitorDescriptor,
     MonitorOption,
 };
+use crate::platform_window::{ShowIntent, WindowPlacement};
 use crate::settings::{DeviceSettings, DeviceSettingsState};
 use crate::window_controller::{WindowController, WindowPort};
 use std::fmt::Display;
@@ -39,6 +41,7 @@ pub(crate) fn report_runtime_result<E: Display>(
 
 pub struct SamplingRuntime {
     stop: Arc<AtomicBool>,
+    reset_hot_zone: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -54,11 +57,16 @@ impl SamplingRuntime {
     ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_worker = stop.clone();
+        let reset_hot_zone = Arc::new(AtomicBool::new(false));
+        let reset_worker = reset_hot_zone.clone();
         let worker = thread::Builder::new()
             .name("flowcontext-hot-zone".to_owned())
             .spawn(move || {
                 let mut last_sample_error = None;
                 while !stop_worker.load(Ordering::Acquire) {
+                    if reset_worker.swap(false, Ordering::AcqRel) {
+                        engine.reset();
+                    }
                     match port.sample() {
                         Ok(sample) => {
                             if stop_worker.load(Ordering::Acquire) {
@@ -91,6 +99,7 @@ impl SamplingRuntime {
             .expect("spawn FlowContext hot-zone worker");
         Self {
             stop,
+            reset_hot_zone,
             worker: Some(worker),
         }
     }
@@ -111,6 +120,13 @@ impl SamplingRuntime {
     pub fn retire(mut self) {
         self.stop.store(true, Ordering::Release);
         drop(self.worker.take());
+    }
+
+    /// Cancel a dwell that was started under now-invalid settings. The worker
+    /// observes this before its next 25ms sample, so disabling the heat zone
+    /// cannot later reveal a panel from a stale edge entry.
+    pub fn reset_hot_zone(&self) {
+        self.reset_hot_zone.store(true, Ordering::Release);
     }
 }
 
@@ -185,7 +201,10 @@ impl<R: tauri::Runtime> TauriRuntimePort<R> {
             if cache.selected_monitor_id == selected_monitor_id
                 && cache.refreshed_at.elapsed() < MONITOR_REFRESH_INTERVAL
             {
-                return Ok(cache.monitor.clone());
+                return Ok(cache
+                    .monitor
+                    .clone()
+                    .with_enabled(settings.hot_zone_enabled));
             }
         }
 
@@ -198,7 +217,7 @@ impl<R: tauri::Runtime> TauriRuntimePort<R> {
                     monitor: monitor.clone(),
                     refreshed_at: Instant::now(),
                 });
-                Ok(monitor)
+                Ok(monitor.with_enabled(settings.hot_zone_enabled))
             }
             Err(error) => self
                 .monitor_cache
@@ -207,6 +226,15 @@ impl<R: tauri::Runtime> TauriRuntimePort<R> {
                 .map(|cache| cache.monitor.clone())
                 .ok_or(error),
         }
+    }
+
+    fn selected_display(&mut self) -> Result<DisplayGeometry, String> {
+        let monitor = self.selected_monitor()?;
+        crate::platform_window::display_geometry(
+            &self.window,
+            crate::hot_zone::Rect::new(monitor.x, monitor.y, monitor.width, monitor.height),
+            monitor.scale_factor,
+        )
     }
 }
 
@@ -227,10 +255,20 @@ pub fn collect_monitor_descriptors<R: tauri::Runtime>(
             let position = monitor.position();
             let size = monitor.size();
             let name = monitor.name().cloned();
-            let id = name
+            let fallback_id = name
                 .as_ref()
                 .map(|name| format!("{name}@{},{}", position.x, position.y))
                 .unwrap_or_else(|| format!("display@{},{}", position.x, position.y));
+            #[cfg(target_os = "windows")]
+            let id = crate::windows_window::stable_id_for_bounds(crate::hot_zone::Rect::new(
+                position.x as f64,
+                position.y as f64,
+                size.width as f64,
+                size.height as f64,
+            ))
+            .unwrap_or(fallback_id);
+            #[cfg(not(target_os = "windows"))]
+            let id = fallback_id;
             let label = name.unwrap_or_else(|| format!("显示器 {}", index + 1));
             MonitorDescriptor::new(
                 id,
@@ -268,13 +306,37 @@ pub fn show_panel<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     settings: DeviceSettings,
 ) -> Result<(), String> {
+    show_panel_with_intent(window, settings, ShowIntent::Passive)
+}
+
+/// The Settings command is the sole tray-driven interactive reveal. Generic
+/// Show, a shortcut and the heat-zone sampler all retain the passive intent.
+pub fn show_panel_interactive<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    settings: DeviceSettings,
+) -> Result<(), String> {
+    show_panel_with_intent(window, settings, ShowIntent::Interactive)
+}
+
+fn show_panel_with_intent<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    settings: DeviceSettings,
+    intent: ShowIntent,
+) -> Result<(), String> {
     let mut port = TauriRuntimePort::new(window.clone(), settings);
-    let monitor = port.selected_monitor()?;
+    let display = port.selected_display()?;
     let controller = port.controller();
-    let mut window_port = TauriWindowPort { window };
-    controller
-        .show(&mut window_port, monitor)
-        .map_err(|error| error.to_string())
+    let mut window_port = TauriWindowPort {
+        window: window.clone(),
+    };
+    let result = controller
+        .show_with_intent(&mut window_port, &display, intent)
+        .map_err(|error| error.to_string());
+    if result.is_ok() {
+        use tauri::Emitter;
+        let _ = window.emit("flowcontext:shown", ());
+    }
+    result
 }
 
 pub(crate) const fn manual_panel_action(requested: Action) -> Action {
@@ -293,11 +355,11 @@ pub fn toggle_panel<R: tauri::Runtime>(
     settings: DeviceSettings,
 ) -> Result<(), String> {
     let mut port = TauriRuntimePort::new(window.clone(), settings);
-    let monitor = port.selected_monitor()?;
+    let display = port.selected_display()?;
     let controller = port.controller();
     let mut window_port = TauriWindowPort { window };
     controller
-        .toggle(&mut window_port, monitor)
+        .toggle(&mut window_port, &display)
         .map_err(|error| error.to_string())
 }
 
@@ -307,12 +369,12 @@ fn apply_manual_panel_action<R: tauri::Runtime>(
     action: Action,
 ) -> Result<(), String> {
     let mut port = TauriRuntimePort::new(window.clone(), settings);
-    let monitor = port.selected_monitor()?;
+    let display = port.selected_display()?;
     let controller = port.controller();
     let mut window_port = TauriWindowPort { window };
     match action {
-        Action::Show => controller.show(&mut window_port, monitor),
-        Action::Hide => controller.hide(&mut window_port, monitor),
+        Action::Show => controller.show(&mut window_port, &display),
+        Action::Hide => controller.hide(&mut window_port, &display),
     }
     .map_err(|error| error.to_string())
 }
@@ -325,7 +387,7 @@ pub fn restart_sampling_after_wake<R: tauri::Runtime>(
     settings: DeviceSettingsState,
     sampling: &std::sync::Mutex<Option<SamplingRuntime>>,
 ) -> Result<(), String> {
-    crate::macos_window::prepare_fullscreen_overlay(&window)?;
+    crate::platform_window::prepare_overlay(&window)?;
 
     let previous = sampling
         .lock()
@@ -353,6 +415,15 @@ impl<R: tauri::Runtime> RuntimePort for TauriRuntimePort<R> {
             .cursor_position()
             .map_err(|error| error.to_string())?;
         let monitor = self.selected_monitor()?;
+        let display = crate::platform_window::display_geometry(
+            &self.window,
+            crate::hot_zone::Rect::new(monitor.x, monitor.y, monitor.width, monitor.height),
+            monitor.scale_factor,
+        )?;
+        // A right-side taskbar owns the physical edge, so it must suppress
+        // the sampler as well as using rcWork for the panel rectangle.
+        let hot_zone_enabled = monitor.enabled && display.hot_zone_enabled();
+        let monitor = monitor.with_enabled(hot_zone_enabled);
         let visible = self
             .window
             .is_visible()
@@ -395,7 +466,7 @@ impl<R: tauri::Runtime> RuntimePort for TauriRuntimePort<R> {
     fn apply(&mut self, action: Action) -> Result<(), String> {
         let window = self.window.clone();
         let scheduler = window.clone();
-        let monitor = self.selected_monitor()?;
+        let display = self.selected_display()?;
         let controller = self.controller();
         let transition_until = self.transition_until_ms.clone();
         let until = self.now_ms().saturating_add(controller.animation_ms);
@@ -404,8 +475,8 @@ impl<R: tauri::Runtime> RuntimePort for TauriRuntimePort<R> {
             .run_on_main_thread(move || {
                 let mut port = TauriWindowPort { window };
                 let result = match action {
-                    Action::Show => controller.show(&mut port, monitor),
-                    Action::Hide => controller.hide(&mut port, monitor),
+                    Action::Show => controller.show(&mut port, &display),
+                    Action::Hide => controller.hide(&mut port, &display),
                 };
                 let context = format!("window {action:?} action");
                 report_runtime_result(&context, result, |message| {
@@ -422,39 +493,15 @@ struct TauriWindowPort<R: tauri::Runtime> {
 
 impl<R: tauri::Runtime> WindowPort for TauriWindowPort<R> {
     fn prepare_overlay(&mut self) -> Result<(), String> {
-        crate::macos_window::prepare_fullscreen_overlay(&self.window)
+        crate::platform_window::prepare_overlay(&self.window)
     }
 
-    fn set_physical_size(&mut self, width: f64, height: f64) -> Result<(), String> {
-        self.window
-            .set_size(tauri::PhysicalSize::new(
-                width.round().max(1.0) as u32,
-                height.round().max(1.0) as u32,
-            ))
-            .map_err(|error| error.to_string())
+    fn place_and_show(&mut self, placement: WindowPlacement) -> Result<(), String> {
+        crate::platform_window::place_and_show(&self.window, placement)
     }
 
-    fn set_physical_position(&mut self, x: f64, y: f64) -> Result<(), String> {
-        self.window
-            .set_position(tauri::PhysicalPosition::new(
-                x.round() as i32,
-                y.round() as i32,
-            ))
-            .map_err(|error| error.to_string())
-    }
-
-    fn set_always_on_top(&mut self, value: bool) -> Result<(), String> {
-        self.window
-            .set_always_on_top(value)
-            .map_err(|error| error.to_string())
-    }
-
-    fn show(&mut self) -> Result<(), String> {
-        crate::macos_window::show_fullscreen_overlay(&self.window)
-    }
-
-    fn hide(&mut self) -> Result<(), String> {
-        crate::macos_window::hide_fullscreen_overlay(&self.window)
+    fn hide_at(&mut self, x: f64, y: f64) -> Result<(), String> {
+        crate::platform_window::hide(&self.window, x, y)
     }
 
     fn is_visible(&self) -> bool {
