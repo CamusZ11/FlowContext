@@ -10,6 +10,8 @@ pub mod platform_window;
 pub mod plugins;
 pub mod runtime;
 pub mod settings;
+mod todo_timer;
+mod todo_week;
 pub mod tray;
 pub mod window_controller;
 #[cfg(target_os = "windows")]
@@ -64,9 +66,16 @@ pub fn run() {
     let builder = tauri::Builder::default();
 
     builder
+        .manage(todo_timer::TimerWindowState::default())
+        .manage(todo_week::WeekWindowState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_device_settings,
             settings::set_device_settings,
+            todo_timer::start_todo_timer,
+            todo_timer::read_todo_timer_task,
+            todo_timer::close_todo_timer,
+            todo_week::open_todo_week,
+            todo_week::todo_week_ready,
             runtime::list_monitors,
             native_commands::secure_storage_get,
             native_commands::secure_storage_set,
@@ -81,10 +90,14 @@ pub fn run() {
         // This plugin must be registered first: a second launch focuses this
         // window and exits before constructing another store or runtime.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let saved = settings::load(app).unwrap_or_default();
-                let _ = runtime::show_panel(window, saved);
-            }
+            // The single-instance listener runs off the main thread on macOS.
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Some(window) = handle.get_webview_window("main") {
+                    let saved = settings::load(&handle).unwrap_or_default();
+                    let _ = runtime::show_panel(window, saved);
+                }
+            });
             if let Err(error) = native_commands::handle_ci_mock_launcher(&args) {
                 eprintln!("FlowContext mock launcher handoff failed: {error}");
             }
@@ -132,6 +145,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running FlowContext desktop application");
+        .build(tauri::generate_context!())
+        .expect("error while building FlowContext desktop application")
+        .run(todo_timer::handle_event);
 }

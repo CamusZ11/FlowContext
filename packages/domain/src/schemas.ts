@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TODO_CATEGORIES } from "./types.ts";
 
 const dateParts = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -109,12 +110,16 @@ export const handoffCreateSchema = z
   })
   .strict();
 
+export const todoCategorySchema = z.enum(TODO_CATEGORIES).nullable();
+
 export const todoSchema = z
   .object({
     id: idSchema,
     title: nonEmptyTextSchema,
     plannedDate: isoDateSchema,
     plannedTime: optionalTimeSchema,
+    plannedEndTime: timeSchema,
+    category: todoCategorySchema.optional(),
     isCompleted: z.boolean().default(false),
     projectId: idSchema.nullable().optional(),
     topicCardId: idSchema.nullable().optional(),

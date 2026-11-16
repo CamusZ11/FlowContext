@@ -37,6 +37,8 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
       "003_session_platform.sql",
       "004_session_platform_nullable.sql",
       "005_prebound_device_enrollments.sql",
+      "008_todo_end_time.sql",
+      "009_todo_category.sql",
     ]);
     repository = new PostgresFlowRepository(pool);
   });
@@ -111,6 +113,38 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
     await expect(repository.listTodos(owner, "2026-08-06")).resolves.toEqual([
       expect.objectContaining({ id: incomplete.id }),
     ]);
+  });
+
+  it("persists todo ranges, rejects reversed endpoints, and accepts legacy start-only edits", async () => {
+    const todo = await repository.createTodo(owner, {
+      title: "scheduled task", plannedDate: "2026-08-05", plannedTime: "09:00", isCompleted: false,
+    });
+    expect(todo.plannedEndTime).toBeNull();
+    await expect(repository.updateTodo(owner, todo.id, { plannedEndTime: "10:30" }))
+      .resolves.toMatchObject({ plannedTime: "09:00", plannedEndTime: "10:30" });
+    await expect(repository.updateTodo(owner, todo.id, { plannedEndTime: "08:00" }))
+      .rejects.toMatchObject({ statusCode: 422 });
+    await expect(repository.listTodos(owner, todo.plannedDate)).resolves.toMatchObject([{ plannedEndTime: "10:30" }]);
+    await expect(repository.updateTodo(owner, todo.id, { plannedTime: "11:00" }))
+      .resolves.toMatchObject({ plannedTime: "11:00", plannedEndTime: null });
+  });
+
+  it("stores category independently of time, completion and rollover, and supports clearing it", async () => {
+    const todo = await repository.createTodo(owner, {
+      title: "categorized task", plannedDate: "2026-08-05", plannedTime: "09:00", isCompleted: false,
+    });
+    expect(todo.category).toBeNull();
+    await expect(repository.updateTodo(owner, todo.id, { category: "health" }))
+      .resolves.toMatchObject({ category: "health", plannedTime: "09:00", isCompleted: false });
+    await expect(pool.query("update todos set category = 'other' where id = $1", [todo.id]))
+      .rejects.toMatchObject({ code: "23514" });
+    const moved = await repository.rolloverIncompleteTodos(owner, "2026-08-05", "2026-08-06", "Asia/Shanghai");
+    expect(moved).toMatchObject([{ id: todo.id, category: "health" }]);
+    await expect(repository.updateTodo(owner, todo.id, { isCompleted: true }))
+      .resolves.toMatchObject({ category: "health", isCompleted: true });
+    await expect(repository.updateTodo(owner, todo.id, { category: null }))
+      .resolves.toMatchObject({ category: null, isCompleted: true });
+    await expect(repository.listTodos(owner, "2026-08-06")).resolves.toMatchObject([{ category: null }]);
   });
 
   it("rolls back the immutable Handoff when the Topic continuity update fails", async () => {

@@ -125,6 +125,8 @@ describe("PostgresFlowRepository", () => {
       title: "Carry forward",
       plannedDate: "2026-08-06",
       plannedTime: "09:30",
+      plannedEndTime: null,
+      category: null,
       isCompleted: false,
       projectId: null,
       topicCardId: null,

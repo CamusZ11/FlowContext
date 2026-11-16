@@ -60,6 +60,32 @@ function renderTodoSection(options: {
 }
 
 describe("TodoSection", () => {
+  it("creates tasks without a time picker in the quick-add form", async () => {
+    const createTodo = vi.fn(async (input: Parameters<FlowRepository["createTodo"]>[0]) => ({ id: "new", ...input }));
+    renderTodoSection({ createTodo });
+
+    expect(screen.queryByLabelText("计划时刻（可选）")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("添加事项"), "快速添加{Enter}");
+    expect(createTodo).toHaveBeenCalledWith(expect.objectContaining({ title: "快速添加", plannedTime: null }));
+  });
+
+  it("starts the timer for the clicked task from the list and calendar", async () => {
+    const startTodoTimer = vi.fn(async () => undefined);
+    renderTodoSection({ platform: { ...webPlatform, startTodoTimer } });
+
+    await userEvent.click(await screen.findByRole("button", { name: "计时 上午任务" }));
+    expect(startTodoTimer).toHaveBeenLastCalledWith({ id: "timed", title: "上午任务" });
+
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "日历" }));
+      await userEvent.click(screen.getByRole("button", { name: "计时 无时刻任务" }));
+      expect(startTodoTimer).toHaveBeenLastCalledWith({ id: "untimed", title: "无时刻任务" });
+    } finally {
+      window.localStorage.removeItem("flowcontext.todo-view");
+      vi.unstubAllGlobals();
+    }
+  });
   it("shows timed, untimed, then completed todos", async () => {
     renderTodoSection();
     const rows = await screen.findAllByTestId("todo-row");

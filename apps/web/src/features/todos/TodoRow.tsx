@@ -1,15 +1,17 @@
 import { useState } from "react";
 import type { Todo, TodoPatch } from "@flowcontext/domain";
 import { PencilIcon, TrashIcon } from "../../ui/icons";
+import { TodoTimerButton } from "./TodoTimer";
 
 export interface TodoRowProps {
   todo: Todo;
   onUpdate(patch: TodoPatch): Promise<void>;
   onDelete(): Promise<void>;
+  onStartTimer?(todo: Todo): void;
   disabled?: boolean;
 }
 
-export function TodoRow({ todo, onUpdate, onDelete, disabled = false }: TodoRowProps) {
+export function TodoRow({ todo, onUpdate, onDelete, onStartTimer, disabled = false }: TodoRowProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(todo.title);
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +70,10 @@ export function TodoRow({ todo, onUpdate, onDelete, disabled = false }: TodoRowP
         ) : (
           <span className={`todo-title${todo.isCompleted ? " completed" : ""}`} title={todo.title}>{todo.title}</span>
         )}
-        {todo.plannedTime ? <time dateTime={todo.plannedTime}>{todo.plannedTime}</time> : null}
+        {todo.plannedTime ? <time dateTime={todo.plannedTime}>{todo.plannedTime}{todo.plannedEndTime && `–${todo.plannedEndTime}`}</time> : null}
       </div>
       <div className="todo-row-actions">
+        {onStartTimer && <TodoTimerButton title={todo.title} onClick={() => onStartTimer(todo)} />}
         <button type="button" data-icon-button="true" aria-label={`编辑 ${todo.title}`} onClick={() => setEditing(true)} disabled={disabled || busy}>
           <PencilIcon width="18" height="18" />
         </button>

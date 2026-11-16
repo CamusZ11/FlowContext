@@ -97,6 +97,22 @@ describe("FlowContext REST API", () => {
     await app.close();
   });
 
+  it("accepts fixed todo categories and rejects unknown category values", async () => {
+    const { app, repository } = createApp();
+    const headers = auth(repository);
+    const input = { title: "任务分类", plannedDate: "2026-08-06", plannedTime: null };
+    const created = await app.inject({ method: "POST", url: "/v1/todos", headers, payload: { ...input, category: "work" } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ category: "work" });
+    const invalid = await app.inject({ method: "POST", url: "/v1/todos", headers, payload: { ...input, category: "other" } });
+    expect(invalid.statusCode).toBe(422);
+    const patch = { method: "PATCH" as const, url: `/v1/todos/${unknownTodoId}`, headers };
+    expect((await app.inject({ ...patch, payload: { category: "other" } })).statusCode).toBe(422);
+    expect((await app.inject({ ...patch, payload: { category: null } })).statusCode).toBe(404);
+    expect(repository.calls).toEqual(["createTodo", "updateTodo"]);
+    await app.close();
+  });
+
   it("returns 404 rather than 422 when PATCH targets an unknown owner-scoped todo", async () => {
     const { app, repository } = createApp();
     const response = await app.inject({

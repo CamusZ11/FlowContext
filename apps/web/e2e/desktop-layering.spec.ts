@@ -6,6 +6,7 @@ function alpha(color: string) {
 }
 
 test("desktop shell provides a translucent rounded frame with spacing around its cards", async ({ page }) => {
+  await page.clock.setFixedTime(new Date(2026, 10, 8, 12));
   await page.setViewportSize({ width: 420, height: 900 });
   await page.goto("/?e2e=desktop-density");
 

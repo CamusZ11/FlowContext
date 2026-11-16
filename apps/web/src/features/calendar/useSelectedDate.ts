@@ -67,12 +67,12 @@ export function useSelectedDate(mode: "web" | "desktop", platform: PlatformPort)
     return () => window.removeEventListener("popstate", handlePopState);
   }, [mode, today]);
 
-  function changeDate(value: string) {
-    const next = validDate(value, today);
+  const changeDate = useCallback((value: string) => {
+    const next = validDate(value, todayRef.current);
     selectedDateRef.current = next;
     setSelectedDate(next);
     if (mode === "web") replaceQueryDate(next);
-  }
+  }, [mode]);
 
   return [selectedDate, changeDate];
 }

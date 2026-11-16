@@ -112,6 +112,21 @@ describe("HttpFlowRepository", () => {
     }));
   });
 
+  it("round-trips a category and rejects a server that ignores the category patch", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([{ ...todo, category: null }, todo]))
+      .mockResolvedValueOnce(jsonResponse({ ...todo, category: "study" }))
+      .mockResolvedValueOnce(jsonResponse(todo));
+    const repo = new HttpFlowRepository({ baseUrl: "https://flowcontext.example.com", getAccessToken: () => "t", getTimezone, fetchImpl });
+
+    const rows = await repo.listTodos(todo.plannedDate);
+    expect(rows[0]).toHaveProperty("category", null);
+    expect(rows[1]).not.toHaveProperty("category");
+    await expect(repo.updateTodo(todo.id, { category: "study" })).resolves.toMatchObject({ category: "study" });
+    expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ body: JSON.stringify({ category: "study" }) });
+    await expect(repo.updateTodo(todo.id, { category: null })).rejects.toMatchObject({ code: "invalid_category" });
+  });
+
   it("posts the two dates and timezone to the atomic rollover endpoint", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([{
       ...todo,

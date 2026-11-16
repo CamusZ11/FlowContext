@@ -1,35 +1,42 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import type { TodoCreate } from "@flowcontext/domain";
-import { ClockIcon, PlusIcon } from "../../ui/icons";
+import { PlusIcon } from "../../ui/icons";
 
 export interface TodoFormProps {
   date: string;
+  slot?: { date: string; time: string };
+  disabled?: boolean;
   onCreate(input: TodoCreate): Promise<void>;
 }
 
-export function TodoForm({ date, onCreate }: TodoFormProps) {
+export function TodoForm({ date, slot, disabled = false, onCreate }: TodoFormProps) {
+  const titleId = useId();
+  const titleInput = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
-  const [plannedTime, setPlannedTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (!slot) return;
+    titleInput.current?.focus();
+  }, [slot]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedTitle = title.trim();
-    if (!normalizedTitle) return;
+    if (!normalizedTitle || saving || disabled) return;
     setSaving(true);
     setError(null);
     try {
       await onCreate({
         title: normalizedTitle,
         plannedDate: date,
-        plannedTime: plannedTime || null,
+        plannedTime: slot?.time ?? null,
         isCompleted: false,
         projectId: null,
         topicCardId: null,
       });
       setTitle("");
-      setPlannedTime("");
     } catch {
       setError("保存失败，请重试");
     } finally {
@@ -39,26 +46,18 @@ export function TodoForm({ date, onCreate }: TodoFormProps) {
 
   return (
     <form className="todo-form" onSubmit={submit}>
-      <label className="sr-only" htmlFor="todo-title">添加事项</label>
+      <label className="sr-only" htmlFor={titleId}>添加事项</label>
       <input
-        id="todo-title"
+        id={titleId}
+        ref={titleInput}
         className="todo-title-input"
         placeholder="添加事项…"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         required
+        disabled={saving || disabled}
       />
-      <label className="todo-time-field">
-        <span className="sr-only">计划时刻</span>
-        <ClockIcon className="todo-time-icon" width="20" height="20" />
-        <input
-          type="time"
-          aria-label="计划时刻（可选）"
-          value={plannedTime}
-          onChange={(event) => setPlannedTime(event.target.value)}
-        />
-      </label>
-      <button type="submit" className="todo-add-button" aria-label={saving ? "保存中…" : "添加"} disabled={saving}>
+      <button type="submit" className="todo-add-button" aria-label={saving ? "保存中…" : "添加"} disabled={saving || disabled}>
         {saving ? "保存中…" : <PlusIcon className="todo-add-icon" width="24" height="24" />}
       </button>
       {error ? <p role="alert" className="error-text">{error}</p> : null}

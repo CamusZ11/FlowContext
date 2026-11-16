@@ -1,0 +1,228 @@
+.flowcontext-app[data-mode="web"]:has(.todo-calendar) { width: min(100%, 72rem); }
+
+.todo-view-controls, .todo-view-switch { display: flex; align-items: center; gap: 0.35rem; }
+.todo-view-controls { gap: 0.6rem; }
+.todo-view-switch {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgb(77 105 137 / 8%);
+}
+.todo-view-switch button {
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+.todo-view-switch button[aria-pressed="true"] { background: var(--glass-control); color: var(--ink); }
+.todo-view-switch button:hover:not(:disabled) { transform: none; }
+.todo-view-switch button:focus-visible { outline: 2px solid #4873aa; outline-offset: -2px; }
+
+.todo-calendar {
+  --calendar-chrome-height: 352px;
+  --hour-height: clamp(30px, calc((100dvh - var(--calendar-chrome-height)) / 16), 64px);
+  --time-grid-line: rgb(77 105 137 / 15%);
+  margin-top: 0.65rem;
+}
+.flowcontext-app[data-mode="desktop"] .todo-calendar { --calendar-chrome-height: 305px; }
+@media (max-width: 560px) {
+  .flowcontext-app[data-mode="web"] .todo-calendar { --calendar-chrome-height: 373px; }
+}
+.todo-calendar-toolbar { display: flex; align-items: center; gap: 0.28rem; margin-bottom: 0.4rem; }
+.todo-calendar-toolbar button { min-width: 32px; min-height: 30px; padding: 1px 8px; border-radius: 8px; font-size: 0.82rem; }
+.todo-calendar-toolbar button span { font-size: 1.25rem; line-height: 1; }
+.todo-calendar-week-range { margin-left: 0.4rem; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.todo-calendar-open-week { margin-left: auto; }
+.todo-calendar-status { margin: 0 0 0.4rem; font-size: 0.82rem; }
+.todo-week-window { min-height: 100vh; padding: clamp(10px, 2vw, 24px); background: var(--canvas); }
+.todo-week-dialog {
+  width: min(72rem, calc(100% - 24px));
+  max-width: none;
+  max-height: calc(100% - 24px);
+  padding: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  background: var(--canvas);
+  color: var(--ink);
+}
+.todo-week-dialog::backdrop { background: rgb(22 38 60 / 35%); }
+.todo-week-dialog-actions { display: flex; justify-content: flex-end; margin-bottom: 0.4rem; }
+.todo-week-dialog-actions button { font-size: 0.82rem; }
+.todo-calendar[data-expanded-week] { --calendar-chrome-height: 252px; }
+.todo-calendar[data-expanded-week] .todo-calendar-grid-scroll { overflow-x: auto; }
+.todo-calendar[data-expanded-week] .todo-calendar-grid { min-width: 730px; }
+.todo-calendar-grid {
+  display: grid;
+  grid-template-columns: 44px repeat(var(--days), minmax(0, 1fr));
+  grid-template-rows: 43px var(--untimed-height) max(480px, calc(var(--hour-height) * 16 - var(--untimed-height)));
+  padding-bottom: 22px;
+  border: 1px solid var(--time-grid-line);
+  border-radius: 12px;
+  background: var(--glass-panel-strong);
+}
+.todo-calendar-date {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 7px;
+  border: 0;
+  border-left: 1px solid var(--time-grid-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.todo-calendar-date:has(+ .todo-calendar-untimed-label) { border-top-right-radius: 11px; }
+.todo-calendar-date time { font-size: 1rem; font-weight: 650; color: var(--ink); }
+.todo-calendar-date[aria-current="date"] time { color: #245ba7; }
+.todo-calendar-date[aria-pressed="true"] { background: #eef4fd; box-shadow: inset 0 -2px #729bd1; }
+button.todo-calendar-date:hover:not(:disabled) { background: #eef4fd; transform: none; }
+.todo-calendar-date:focus-visible { outline: 2px solid #4873aa; outline-offset: -3px; }
+.todo-calendar-hours, .todo-calendar-day { position: relative; }
+.todo-calendar-untimed-label { align-self: center; text-align: center; color: var(--muted); font-size: 0.7rem; }
+.todo-calendar-untimed, .todo-calendar-events { list-style: none; margin: 0; padding: 0; }
+.todo-calendar-untimed {
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid var(--time-grid-line);
+  padding: 3px;
+  background: #f5f8fc;
+  scrollbar-width: thin;
+}
+.todo-calendar-untimed[aria-hidden="true"] { visibility: hidden; padding: 0; }
+.todo-calendar-untimed li { margin-bottom: 4px; }
+.todo-calendar-events { position: absolute; inset: 0; pointer-events: none; }
+.todo-calendar-hours span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+.todo-calendar-day {
+  border-left: 1px solid var(--time-grid-line);
+  background: repeating-linear-gradient(to bottom, var(--time-grid-line) 0 1px, transparent 1px 6.25%);
+  box-shadow: 0 1px var(--time-grid-line);
+}
+.todo-calendar-slot, .todo-calendar-timed, .todo-calendar-drop {
+  position: absolute;
+}
+.todo-calendar-slot {
+  inset-inline: 0;
+  height: 6.25%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.todo-calendar-slot:last-of-type { height: 21px; }
+.todo-calendar-slot:hover:not(:disabled), .todo-calendar-slot:focus-visible { background: rgb(104 152 218 / 10%); transform: none; }
+.todo-calendar-slot:focus-visible { outline: 2px solid #4873aa; outline-offset: -2px; }
+.todo-calendar-drop {
+  inset-inline: 0;
+  z-index: 2;
+  border-top: 2px solid #4873aa;
+  background: rgb(231 239 254 / 92%);
+  pointer-events: none;
+  padding: 1px 5px;
+  color: #213d64;
+  font-size: 0.74rem;
+}
+.todo-calendar-task {
+  position: relative;
+  pointer-events: auto;
+  width: 100%;
+  height: 21px;
+  min-height: 21px;
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 0 4px;
+  border-left: 2px solid #8baee0;
+  border-radius: 4px;
+  background: #e7effe;
+  color: #213d64;
+  font-size: 0.74rem;
+  overflow: hidden;
+  box-shadow: none;
+}
+.todo-calendar-task.todo-calendar-timed { position: absolute; }
+.todo-calendar-task input[type="checkbox"] {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  margin: 4px 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.todo-calendar-task-body {
+  align-self: stretch;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+  min-height: 21px;
+  justify-content: flex-start;
+  gap: 5px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  line-height: 21px;
+}
+.todo-calendar-task .todo-timer-button {
+  flex: none;
+  height: 21px;
+  width: 19px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+.todo-calendar-task .todo-timer-button:hover { background: rgb(71 115 170 / 14%); transform: none; }
+.todo-calendar-task:has(.todo-timer-button) .todo-calendar-resize { inset-inline-end: 23px; }
+.todo-calendar-resize {
+  position: absolute;
+  inset-inline: 19px 0;
+  height: 5px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.todo-calendar-resize[data-resize-edge="开始"] { top: 0; }
+.todo-calendar-resize[data-resize-edge="结束"] { bottom: 0; }
+.todo-calendar-untimed .todo-calendar-task { background: #e9edf4; border-left-color: #a6b6cb; }
+.todo-calendar-task:hover { border-color: #4873aa; }
+.todo-calendar-task-body:hover:not(:disabled) { transform: none; }
+.todo-calendar-task-body:active { cursor: grabbing; }
+.todo-calendar-task :is(button, input):focus-visible { outline: 2px solid #4873aa; outline-offset: -2px; }
+.todo-calendar-task-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-calendar-task time { flex: none; margin-left: auto; font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+.todo-calendar-task[data-completed="true"] { border-color: #8fbbab; background: #e5f1eb; color: #3c6356; }
+.todo-calendar-task[data-completed="true"] .todo-calendar-task-title { text-decoration: line-through; }
+.todo-calendar-task[data-category="work"] { background: #edf1ff; border-left-color: #93a9e2; }
+.todo-calendar-task[data-category="study"] { background: #fdf0df; border-left-color: #dfad70; }
+.todo-calendar-task[data-category="daily"] { background: #e3f6fa; border-left-color: #79bbd0; }
+.todo-calendar-task[data-category="health"] { background: #faf2d8; border-left-color: #d3b85f; }
+@media (min-width: 860px) { .todo-calendar-task time { position: absolute; clip-path: inset(50%); } }
+.todo-calendar-editor { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 0.4rem; }
+.todo-calendar-editor span { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.todo-calendar-editor :is(input, select) { padding: 0.24rem 0.34rem; border-radius: 7px; font-size: 0.75rem; }

@@ -1025,6 +1025,7 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "block2",
+ "chrono",
  "keyring",
  "objc2-app-kit",
  "objc2-foundation",

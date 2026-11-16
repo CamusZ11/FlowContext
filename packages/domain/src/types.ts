@@ -61,11 +61,16 @@ export interface HandoffCreate {
   topicUpdate?: Pick<HandoffUpdate, "currentState" | "nextAction" | "openQuestions">;
 }
 
+export const TODO_CATEGORIES = ["work", "study", "daily", "health"] as const;
+export type TodoCategory = typeof TODO_CATEGORIES[number];
+
 export interface Todo {
   id: string;
   title: string;
   plannedDate: string;
   plannedTime: string | null;
+  plannedEndTime?: string | null;
+  category?: TodoCategory | null;
   isCompleted: boolean;
   projectId?: string | null;
   topicCardId?: string | null;
@@ -73,7 +78,7 @@ export interface Todo {
 
 export type TodoCreate = Omit<Todo, "id">;
 
-export type TodoPatch = Partial<Pick<Todo, "title" | "plannedDate" | "plannedTime" | "isCompleted" | "projectId" | "topicCardId">>;
+export type TodoPatch = Partial<TodoCreate>;
 
 export interface DailyProjection {
   date: string;

@@ -3,6 +3,7 @@ import type { FlowRepository } from "@flowcontext/data";
 import { HttpFlowRepository } from "@flowcontext/data";
 import type { Todo, TodoCreate, TodoPatch, TopicCard } from "@flowcontext/domain";
 import { App } from "./app/App";
+import { TodoTimer } from "./features/todos/TodoTimer";
 import {
   createHttpAuth,
   DEVICE_TOKEN_STORAGE_KEY,
@@ -15,14 +16,14 @@ import "./styles/layout.css";
 
 function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics: TopicCard[] = []): FlowRepository {
   let nextId = 1;
-  let todos = [...seed];
+  let todos: Todo[] = seed.map((todo) => ({ category: null, ...todo }));
   const listeners = new Set<(date: string) => void>();
   const notify = (date: string) => listeners.forEach((listener) => listener(date));
   return {
     capabilities: { todoRollover: true },
     listTodos: async (date) => todos.filter((todo) => todo.plannedDate === date),
     createTodo: async (input: TodoCreate) => {
-      const todo: Todo = { ...input, id: `e2e-${nextId++}` };
+      const todo: Todo = { plannedEndTime: null, category: null, ...input, id: `e2e-${nextId++}` };
       todos = [...todos, todo];
       notify(todo.plannedDate);
       return todo;
@@ -95,6 +96,24 @@ if (!rootElement) throw new Error("FlowContext root element is missing");
 const root: HTMLElement = rootElement;
 
 async function bootstrap() {
+  if (window.location.hash === "#todo-timer") {
+    const [{ invoke }, { listen }] = await Promise.all([
+      import("@tauri-apps/api/core"), import("@tauri-apps/api/event"),
+    ]);
+    type ActiveTask = { title: string; revision: number };
+    const timerRoot = createRoot(root);
+    const showTask = (task: ActiveTask) => timerRoot.render(
+      <TodoTimer key={task.revision} title={task.title} onClose={() => invoke("close_todo_timer")} />,
+    );
+    let receivedTask = false;
+    await listen<ActiveTask>("flowcontext:todo-timer-task", ({ payload }) => {
+      receivedTask = true;
+      showTask(payload);
+    });
+    const task = await invoke<ActiveTask | null>("read_todo_timer_task");
+    if (task && !receivedTask) showTask(task);
+    return;
+  }
   const provider = import.meta.env.VITE_FLOWCONTEXT_PROVIDER;
   let platform: Awaited<ReturnType<typeof createRuntimePlatform>>;
   try {
@@ -105,11 +124,12 @@ async function bootstrap() {
   }
 
   const params = new URLSearchParams(window.location.search);
+  const expandedWeek = window.location.hash === "#todo-week";
   // Deterministic fixtures are available only from the development server
   // used by Playwright; a production bundle can never bypass the real
   // AuthGate. Real provider selection happens only after this E2E branch.
   const e2eMode = platform.mode === "web" && import.meta.env.DEV ? params.get("e2e") : null;
-  if (e2eMode === "1" || e2eMode === "network-failure" || e2eMode === "desktop-density") {
+  if (e2eMode === "1" || e2eMode === "network-failure" || e2eMode === "desktop-density" || e2eMode === "calendar-coverage") {
     const today = platform.today();
     const seed: Todo[] = e2eMode === "desktop-density"
       ? [
@@ -121,7 +141,19 @@ async function bootstrap() {
         { id: "done-3", title: "排好今天的口播", plannedDate: today, plannedTime: null, isCompleted: true, projectId: null, topicCardId: null },
       ]
       : e2eMode === "network-failure"
-      ? [{ id: "morning", title: "上午任务", plannedDate: today, plannedTime: "09:00", isCompleted: false, projectId: null, topicCardId: null }]
+      ? [{ id: "morning", title: "上午任务", plannedDate: today, plannedTime: "09:00", plannedEndTime: null, isCompleted: false, projectId: null, topicCardId: null }]
+      : e2eMode === "calendar-coverage"
+      ? [
+        { title: "写结算说明", plannedTime: "09:30" },
+        { title: "核对汇总", plannedTime: "09:45" },
+        { title: "准备资料", plannedTime: null },
+        { title: "提前出发", plannedTime: "06:59" },
+        { title: "收尾", plannedTime: "23:00" },
+        { title: "夜间备份", plannedTime: "23:01" },
+        { title: "发送结算单", plannedTime: "07:00", plannedDate: "2026-08-06" },
+        { title: "整理材料", plannedTime: "14:00", plannedEndTime: "17:00", plannedDate: "2026-08-04" },
+        { title: "复核材料", plannedTime: "17:00", plannedEndTime: "18:00", plannedDate: "2026-08-04" },
+      ].map((todo, index) => ({ id: `calendar-${index}`, plannedDate: "2026-08-05", isCompleted: false, projectId: null, topicCardId: null, ...todo }))
       : [];
     const topics: TopicCard[] = e2eMode === "desktop-density"
       ? [{ id: "density-topic", projectId: "flowcontext", title: "Handoff 云端绑定与写入", state: "open", currentState: "Handoff 原子写入已完成，等待 macOS 实机验收。", nextAction: "在 macOS 原生全屏应用中验证热区唤出。", openQuestions: [], lastActiveAt: "2026-08-04T12:00:00.000Z", focusRank: 1 }]
@@ -131,6 +163,7 @@ async function bootstrap() {
         mode={e2eMode === "desktop-density" ? "desktop" : platform.mode}
         repository={createMemoryRepository(seed, e2eMode === "network-failure", topics)}
         platform={platform}
+        expandedWeek={expandedWeek}
         auth={createE2eAuth()}
       />,
     );
@@ -158,6 +191,7 @@ async function bootstrap() {
           getTimezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
         })}
         platform={platform}
+        expandedWeek={expandedWeek}
         auth={createHttpAuth({
           baseUrl: apiUrl,
           storage,

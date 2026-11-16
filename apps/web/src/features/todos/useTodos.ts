@@ -1,11 +1,26 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { FlowRepository } from "@flowcontext/data";
 import { sortTodosForDate, type Todo, type TodoCreate, type TodoPatch } from "@flowcontext/domain";
 import { usePlatform } from "../../app/PlatformContext";
 import { useFlowRepository } from "../../app/RepositoryContext";
 
 export function todosQueryKey(date: string) {
   return ["todos", date] as const;
+}
+
+function todosQuery(repository: FlowRepository, date: string) {
+  return {
+    queryKey: todosQueryKey(date),
+    queryFn: async () => sortTodosForDate(await repository.listTodos(date), date),
+  };
+}
+
+export function useCalendarTodos(dates: string[]) {
+  const repository = useFlowRepository();
+  return useQueries({
+    queries: dates.map((date) => ({ ...todosQuery(repository, date), refetchInterval: 60_000 })),
+  });
 }
 
 function rolloverQueryKey(today: string, ownerIdentity: string) {
@@ -54,8 +69,7 @@ export function useTodos(date: string, ownerIdentity = "unscoped") {
     },
   });
   const query = useQuery({
-    queryKey: todosQueryKey(date),
-    queryFn: async () => sortTodosForDate(await repository.listTodos(date), date),
+    ...todosQuery(repository, date),
     enabled: !shouldRunRollover || rollover.isSuccess,
   });
 
@@ -85,9 +99,22 @@ export function useTodoMutations(date: string) {
   const create = useMutation({
     mutationFn: (input: TodoCreate) => repository.createTodo(input),
     onSuccess: (created) => {
-      queryClient.setQueryData(todosQueryKey(date), (current: Todo[] | undefined) =>
-        sortTodosForDate([...(current ?? []), created], date));
-      return invalidate();
+      const key = todosQueryKey(created.plannedDate);
+      queryClient.setQueryData(key, (current: Todo[] | undefined) =>
+        sortTodosForDate([...(current ?? []).filter((todo) => todo.id !== created.id), created], created.plannedDate));
+      return queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+  const updateFromCalendar = useMutation({
+    mutationFn: ({ todo, patch }: { todo: Todo; patch: TodoPatch }) => repository.updateTodo(todo.id, patch),
+    onSuccess: async (updated, { todo }) => {
+      const dates = [...new Set([todo.plannedDate, updated.plannedDate])];
+      await Promise.all(dates.map((day) => queryClient.cancelQueries({ queryKey: todosQueryKey(day) })));
+      for (const day of dates) {
+        queryClient.setQueryData(todosQueryKey(day), (current: Todo[] | undefined) =>
+          sortTodosForDate([...(current ?? []).filter((item) => item.id !== updated.id), updated], day));
+      }
+      return Promise.all(dates.map((day) => queryClient.invalidateQueries({ queryKey: todosQueryKey(day) })));
     },
   });
   const update = useMutation({
@@ -126,5 +153,5 @@ export function useTodoMutations(date: string) {
     },
   });
 
-  return { create, update, remove };
+  return { create, update, remove, updateFromCalendar };
 }

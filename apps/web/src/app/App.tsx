@@ -22,17 +22,34 @@ export interface AppProps {
   platform: PlatformPort;
   auth?: AuthPort;
   authApiUrl?: string;
+  expandedWeek?: boolean;
 }
 
-export function App({ mode = "web", repository, platform, auth, authApiUrl }: AppProps) {
+export function App({ mode = "web", repository, platform, auth, authApiUrl, expandedWeek = false }: AppProps) {
   const content = (rolloverIdentity?: string) => (
     <AppProviders repository={repository} platform={{ ...platform, mode }}>
-      <AppContent mode={mode} rolloverIdentity={rolloverIdentity} />
+      {expandedWeek ? <WeekContent mode={mode} rolloverIdentity={rolloverIdentity} /> : <AppContent mode={mode} rolloverIdentity={rolloverIdentity} />}
     </AppProviders>
   );
   return auth
     ? <AuthGate auth={auth} platform={platform} apiUrl={authApiUrl}>{(session) => content(session.userId)}</AuthGate>
     : content();
+}
+
+function WeekContent({ mode, rolloverIdentity }: { mode: "web" | "desktop"; rolloverIdentity?: string }) {
+  const platform = usePlatform();
+  const [date, setDate] = useSelectedDate(mode, platform);
+  const { listenTodoWeekDate } = platform;
+  useEffect(() => {
+    const listening = listenTodoWeekDate?.(setDate);
+    void listening?.catch(() => undefined);
+    return () => { void listening?.then((stop) => stop()).catch(() => undefined); };
+  }, [listenTodoWeekDate, setDate]);
+  return (
+    <main className="todo-week-window">
+      <TodoSection date={date} rolloverIdentity={rolloverIdentity} onDateChange={setDate} expandedWeek />
+    </main>
+  );
 }
 
 function AppContent({ mode, rolloverIdentity }: { mode: "web" | "desktop"; rolloverIdentity?: string }) {

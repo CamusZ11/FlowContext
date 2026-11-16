@@ -28,6 +28,13 @@ test("macOS overlay uses native front ordering after Tauri shows the window", as
   );
 });
 
+test("reopening a running app restores its panel on the main thread", async () => {
+  const startup = await readFile(new URL("./src-tauri/src/lib.rs", import.meta.url), "utf8");
+  const singleInstance = startup.split("tauri_plugin_single_instance::init(")[1]?.split(".plugin(")[0];
+
+  assert.match(singleInstance, /run_on_main_thread\(move \|\| \{[\s\S]*runtime::show_panel/);
+});
+
 test("desktop uses only the manual FlowContext tray icon", async () => {
   const config = JSON.parse(
     await readFile(new URL("./src-tauri/tauri.conf.json", import.meta.url), "utf8"),

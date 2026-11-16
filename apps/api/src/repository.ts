@@ -12,6 +12,7 @@ import type {
   TodoPatch,
   TopicCard,
 } from "@flowcontext/domain";
+import { todoCategorySchema } from "@flowcontext/domain";
 import type { Pool, PoolClient, QueryResult } from "pg";
 
 import type { Principal } from "./auth.js";
@@ -102,6 +103,8 @@ function mapTodo(row: Row): Todo {
     title: stringValue(row, "title"),
     plannedDate: calendarDateValue(row, "planned_date"),
     plannedTime: nullableString(row, "planned_time")?.slice(0, 5) ?? null,
+    plannedEndTime: nullableString(row, "planned_end_time")?.slice(0, 5) ?? null,
+    category: todoCategorySchema.parse(row.category ?? null),
     isCompleted: row.is_completed === true,
     projectId: nullableString(row, "project_id"),
     topicCardId: nullableString(row, "topic_card_id"),
@@ -225,7 +228,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
 
   async listTodos(principal: Principal, date: string): Promise<Todo[]> {
     const result = await this.flowPool.query<Row>(
-      `select id, title, planned_date, planned_time, is_completed, project_id, topic_card_id
+      `select id, title, planned_date, planned_time, planned_end_time, category, is_completed, project_id, topic_card_id
        from todos
        where owner_id = $1 and planned_date = $2
        order by planned_time nulls last, created_at, id`,
@@ -238,10 +241,11 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
     try {
       const row = await queryOne(
         this.flowPool,
-        `insert into todos (owner_id, title, planned_date, planned_time, is_completed, project_id, topic_card_id)
-         values ($1, $2, $3, $4, $5, $6, $7)
-         returning id, title, planned_date, planned_time, is_completed, project_id, topic_card_id`,
-        [principal.ownerId, input.title, input.plannedDate, input.plannedTime, input.isCompleted, input.projectId ?? null, input.topicCardId ?? null],
+        `insert into todos (owner_id, title, planned_date, planned_time, is_completed, project_id, topic_card_id, planned_end_time, category)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         returning id, title, planned_date, planned_time, planned_end_time, category, is_completed, project_id, topic_card_id`,
+        [principal.ownerId, input.title, input.plannedDate, input.plannedTime, input.isCompleted,
+          input.projectId ?? null, input.topicCardId ?? null, input.plannedEndTime ?? null, input.category ?? null],
       );
       if (!row) throw new Error("todo_create_failed");
       const todo = mapTodo(row);
@@ -259,6 +263,8 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
       ["title", patch.title],
       ["planned_date", patch.plannedDate],
       ["planned_time", patch.plannedTime],
+      ["planned_end_time", patch.plannedEndTime],
+      ["category", patch.category],
       ["is_completed", patch.isCompleted],
       ["project_id", patch.projectId],
       ["topic_card_id", patch.topicCardId],
@@ -266,6 +272,10 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
       if (value === undefined) continue;
       values.push(value);
       fields.push(`${column} = $${values.length}`);
+      // A client editing only the start time may be unaware of the saved end.
+      if (column === "planned_time" && patch.plannedEndTime === undefined) {
+        fields.push(`planned_end_time = case when planned_end_time > $${values.length}::time then planned_end_time end`);
+      }
     }
     if (fields.length === 0) return null;
     try {
@@ -276,7 +286,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
          ), updated as (
            update todos set ${fields.join(", ")}, updated_at = now()
            where owner_id = $1 and id = $2
-           returning id, title, planned_date, planned_time, is_completed, project_id, topic_card_id
+           returning id, title, planned_date, planned_time, planned_end_time, category, is_completed, project_id, topic_card_id
          )
          select updated.*, previous.old_planned_date from updated cross join previous`,
         values,
@@ -296,7 +306,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
     const row = await queryOne(
       this.flowPool,
       `delete from todos where owner_id = $1 and id = $2
-       returning id, title, planned_date, planned_time, is_completed, project_id, topic_card_id`,
+       returning id, title, planned_date, planned_time, planned_end_time, category, is_completed, project_id, topic_card_id`,
       [principal.ownerId, id],
     );
     if (!row) return null;
@@ -319,7 +329,7 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
         `update todos
          set planned_date = $3, updated_at = now()
          where owner_id = $1 and planned_date = $2 and is_completed = false
-         returning id, title, planned_date, planned_time, is_completed, project_id, topic_card_id`,
+         returning id, title, planned_date, planned_time, planned_end_time, category, is_completed, project_id, topic_card_id`,
         [principal.ownerId, fromDate, toDate],
       );
       todos = result.rows.map(mapTodo);

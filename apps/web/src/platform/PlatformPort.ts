@@ -13,6 +13,9 @@ export interface PlatformPort {
   devicePlatform?: "macos" | "windows";
   /** Explicit device identity; absent means the device is not configured. */
   deviceId?: string;
+  openTodoWeek?(date: string): Promise<void>;
+  listenTodoWeekDate?(onDate: (date: string) => void): Promise<() => void>;
+  startTodoTimer?(task: { id: string; title: string }): Promise<void>;
   today(): string;
   openExternal(url: string): Promise<void>;
   sessionStorage: SessionStoragePort;

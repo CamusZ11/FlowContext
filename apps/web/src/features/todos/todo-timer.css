@@ -1,0 +1,35 @@
+.todo-timer {
+  height: 44px;
+  margin: 4px;
+  padding: 0 8px 0 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 22px;
+  background: #16171a;
+  color: #f4f5f7;
+}
+.todo-timer-indicator { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #8ee3ab; }
+.todo-timer[data-paused="true"] .todo-timer-indicator { background: #aeb2bb; }
+.todo-timer-readout { display: grid; flex: 1; min-width: 0; gap: 1px; }
+.todo-timer-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; color: #c2c6ce; }
+.todo-timer [role="timer"] {
+  line-height: 1;
+  font-size: 1.15rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.todo-timer button {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #303136;
+  color: inherit;
+  box-shadow: none;
+}
+.todo-timer button:hover { background: #45474e; transform: none; }
+.todo-timer button:focus-visible { outline: 2px solid #b1caf1; outline-offset: 2px; }
+.todo-timer svg { width: 17px; height: 17px; }

@@ -5,7 +5,9 @@
 - JavaScript/TypeScript 使用 `pnpm`；功能与修复遵守测试先行
 - 不写入 Secret、Token、数据库连接串或个人凭据；只提交示例配置
 - 不增加本地业务 SQLite；本机只保存设备偏好与登录会话
-- 第一版暂不处理备份、签名、公证和自动更新
+- 第一版暂不处理应用内备份、公证和自动更新；发布候选包仍须完成严格签名校验
+- macOS 本地更新：用户已长期授权直接覆盖安装。候选包构建并通过严格签名校验后，直接覆盖 `/Applications/FlowContext.app`，无需逐次确认；不创建或保留 `FlowContext.app.backup-*`。覆盖后再次校验安装包签名并启动验证。
+- 本机后续更新沿用已安装 FlowContext 的 Apple Development 团队和 `com.camus.flowcontext` 标识。构建时通过 `APPLE_SIGNING_IDENTITY` 选择钥匙串里的对应证书，覆盖前核对候选包与已安装包的 designated requirement，防止临时签名或更换团队后再次弹出钥匙串授权。
 - 调试或验收 macOS 原生浮窗、热区、全屏 Space 或不抢焦点行为时，必须使用 `$macos-desktop-overlay-validation`，把自动化、构建、运行和实机矩阵分开记录
 ## 目录职责
 - `apps/`：共享 Web 前端与 Tauri 桌面应用

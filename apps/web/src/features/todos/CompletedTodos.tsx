@@ -5,10 +5,11 @@ export interface CompletedTodosProps {
   todos: Todo[];
   onUpdate(id: string, patch: TodoPatch): Promise<void>;
   onDelete(id: string): Promise<void>;
+  onStartTimer?(todo: Todo): void;
   disabled?: boolean;
 }
 
-export function CompletedTodos({ todos, onUpdate, onDelete, disabled }: CompletedTodosProps) {
+export function CompletedTodos({ todos, onUpdate, onDelete, onStartTimer, disabled }: CompletedTodosProps) {
   if (todos.length === 0) return null;
   return (
     <ul className="todo-list completed-todos" aria-label="已完成 To-do">
@@ -18,6 +19,7 @@ export function CompletedTodos({ todos, onUpdate, onDelete, disabled }: Complete
           todo={todo}
           onUpdate={(patch) => onUpdate(todo.id, patch)}
           onDelete={() => onDelete(todo.id)}
+          onStartTimer={onStartTimer}
           disabled={disabled}
         />
       ))}

@@ -7,6 +7,7 @@ import type {
   TodoCreate,
   TodoPatch,
 } from "@flowcontext/domain";
+import { todoCategorySchema } from "@flowcontext/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { Principal } from "./auth.js";
@@ -152,12 +153,20 @@ function pathParameters(request: FastifyRequest): Record<string, unknown> {
   return record(request.params ?? {});
 }
 
+function todoCategory(value: unknown) {
+  const parsed = todoCategorySchema.safeParse(value);
+  if (!parsed.success) throw invalidRequest();
+  return parsed.data;
+}
+
 function parseTodoCreate(value: unknown): TodoCreate {
   const body = record(value);
   return {
     title: requiredString(body.title),
     plannedDate: isoDate(body.plannedDate),
     plannedTime: plannedTime(body.plannedTime),
+    ...(body.plannedEndTime === undefined ? {} : { plannedEndTime: plannedTime(body.plannedEndTime) }),
+    ...(body.category === undefined ? {} : { category: todoCategory(body.category) }),
     isCompleted: body.isCompleted === undefined ? false : boolean(body.isCompleted),
     projectId: optionalUuid(body.projectId) ?? null,
     topicCardId: optionalUuid(body.topicCardId) ?? null,
@@ -175,6 +184,8 @@ function parseTodoPatch(value: unknown): TodoPatch {
   if ("title" in body) patch.title = requiredString(body.title);
   if ("plannedDate" in body) patch.plannedDate = isoDate(body.plannedDate);
   if ("plannedTime" in body) patch.plannedTime = plannedTime(body.plannedTime);
+  if ("plannedEndTime" in body) patch.plannedEndTime = plannedTime(body.plannedEndTime);
+  if ("category" in body) patch.category = todoCategory(body.category);
   if ("isCompleted" in body) patch.isCompleted = boolean(body.isCompleted);
   if ("projectId" in body) patch.projectId = optionalUuid(body.projectId) ?? null;
   if ("topicCardId" in body) patch.topicCardId = optionalUuid(body.topicCardId) ?? null;

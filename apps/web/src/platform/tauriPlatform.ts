@@ -234,6 +234,19 @@ export async function createTauriPlatform(options: TauriPlatformOptions): Promis
     devicePlatform: options.devicePlatform ?? detectedPlatform ?? nativeDevicePlatform(),
     deviceId,
     today: () => localIsoDate(now),
+    openTodoWeek: async (date) => { await options.invoke("open_todo_week", { date }); },
+    listenTodoWeekDate: async (onDate) => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const stop = await listen<string>("flowcontext:todo-week-date", ({ payload }) => onDate(payload));
+      try {
+        await options.invoke("todo_week_ready");
+        return stop;
+      } catch (error) {
+        stop();
+        throw error;
+      }
+    },
+    startTodoTimer: async (task) => { await options.invoke("start_todo_timer", { task }); },
     openExternal: async (url) => {
       if (!isCodexDeepLink(url)) throw new Error("Only validated codex:// links can be opened by the desktop shell");
       await options.invoke("open_codex_link", { url });

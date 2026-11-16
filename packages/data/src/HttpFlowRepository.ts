@@ -9,6 +9,7 @@ import type {
   TodoPatch,
   TopicCard,
 } from "@flowcontext/domain";
+import { todoCategorySchema } from "@flowcontext/domain";
 import type { FlowRepository, TodoListener, TopicContext } from "./FlowRepository.ts";
 import {
   createHttpTransport,
@@ -89,6 +90,7 @@ function assertTime(value: unknown, code = "invalid_plannedTime"): string | null
 function validateTodoInput(input: TodoCreate | TodoPatch): void {
   if ("plannedDate" in input && input.plannedDate !== undefined) assertIsoDate(input.plannedDate);
   if ("plannedTime" in input && input.plannedTime !== undefined) assertTime(input.plannedTime);
+  if (input.plannedEndTime !== undefined) assertTime(input.plannedEndTime, "invalid_plannedEndTime");
 }
 
 function mapTodo(value: unknown): Todo {
@@ -96,6 +98,8 @@ function mapTodo(value: unknown): Todo {
   const plannedDate = stringField(row.plannedDate, "plannedDate");
   assertIsoDate(plannedDate);
   const plannedTime = assertTime(row.plannedTime);
+  const category = todoCategorySchema.optional().safeParse(row.category);
+  if (!category.success) return invalid("invalid_category");
   if (typeof row.id !== "string" || typeof row.title !== "string" || typeof row.isCompleted !== "boolean") {
     return invalid("invalid_response");
   }
@@ -104,6 +108,8 @@ function mapTodo(value: unknown): Todo {
     title: row.title,
     plannedDate,
     plannedTime,
+    ...(row.plannedEndTime === undefined ? {} : { plannedEndTime: assertTime(row.plannedEndTime, "invalid_plannedEndTime") }),
+    ...(category.data === undefined ? {} : { category: category.data }),
     isCompleted: row.isCompleted,
     projectId: nullableString(row.projectId, true),
     topicCardId: nullableString(row.topicCardId, true),
@@ -403,9 +409,13 @@ export class HttpFlowRepository implements FlowRepository {
       isCompleted: input.isCompleted,
     };
     if (input.projectId !== undefined) body.projectId = input.projectId;
+    if (input.plannedEndTime !== undefined) body.plannedEndTime = input.plannedEndTime;
+    if (input.category !== undefined) body.category = input.category;
     if (input.topicCardId !== undefined) body.topicCardId = input.topicCardId;
     const payload = await this.transport.request<unknown>("/v1/todos", { method: "POST", body });
-    return mapTodo(payload);
+    const todo = mapTodo(payload);
+    if (input.category !== undefined && todo.category !== input.category) return invalid("invalid_category");
+    return todo;
   }
 
   async updateTodo(id: string, patch: TodoPatch): Promise<Todo> {
@@ -414,6 +424,8 @@ export class HttpFlowRepository implements FlowRepository {
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.plannedDate !== undefined) body.plannedDate = patch.plannedDate;
     if (patch.plannedTime !== undefined) body.plannedTime = patch.plannedTime;
+    if (patch.plannedEndTime !== undefined) body.plannedEndTime = patch.plannedEndTime;
+    if (patch.category !== undefined) body.category = patch.category;
     if (patch.isCompleted !== undefined) body.isCompleted = patch.isCompleted;
     if (patch.projectId !== undefined) body.projectId = patch.projectId;
     if (patch.topicCardId !== undefined) body.topicCardId = patch.topicCardId;
@@ -421,7 +433,12 @@ export class HttpFlowRepository implements FlowRepository {
       method: "PATCH",
       body,
     });
-    return mapTodo(payload);
+    const todo = mapTodo(payload);
+    if (patch.category !== undefined && todo.category !== patch.category) return invalid("invalid_category");
+    if (patch.plannedEndTime !== undefined && todo.plannedEndTime !== patch.plannedEndTime) {
+      return invalid("invalid_plannedEndTime");
+    }
+    return todo;
   }
 
   async deleteTodo(id: string): Promise<void> {

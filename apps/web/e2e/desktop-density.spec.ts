@@ -7,6 +7,7 @@ async function openDesktopDensity(page: import("@playwright/test").Page, width: 
 }
 
 test("desktop panel uses compact density without headline or close control", async ({ page }) => {
+  await page.clock.setFixedTime(new Date(2026, 10, 8, 12));
   await openDesktopDensity(page, 420, 900);
   await expect(page.getByRole("heading", { name: "今天，继续推进" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /关闭|收起 FlowContext/ })).toHaveCount(0);

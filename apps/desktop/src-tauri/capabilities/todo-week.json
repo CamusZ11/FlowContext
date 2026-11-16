@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "todo-week",
+  "description": "Receive date selections in the standalone week window",
+  "windows": ["todo-week"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}
