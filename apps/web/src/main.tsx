@@ -1,20 +1,20 @@
 import { createRoot } from "react-dom/client";
 import type { FlowRepository } from "@flowcontext/data";
 import { HttpFlowRepository } from "@flowcontext/data";
-import type { Todo, TodoCreate, TodoPatch, TopicCard } from "@flowcontext/domain";
+import type { Todo, TodoCreate, TodoPatch, TodoTimeEntry, TopicCard } from "@flowcontext/domain";
 import { App } from "./app/App";
-import { TodoTimer } from "./features/todos/TodoTimer";
+import { TodoTimer, type TodoTimerRequest, type TodoTimerTask } from "./features/todos/TodoTimer";
 import {
   createHttpAuth,
   DEVICE_TOKEN_STORAGE_KEY,
   type AuthPort,
 } from "./features/auth/useAuth";
-import { createRuntimePlatform } from "./platform/tauriPlatform";
+import { createRuntimePlatform, createTauriSessionStorage } from "./platform/tauriPlatform";
 import { getBootstrapErrorDetail, type BootstrapErrorKind } from "./bootstrapMessages";
 import "./styles/tokens.css";
 import "./styles/layout.css";
 
-function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics: TopicCard[] = []): FlowRepository {
+function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics: TopicCard[] = [], timeEntries?: Record<string, TodoTimeEntry[]>): FlowRepository {
   let nextId = 1;
   let todos: Todo[] = seed.map((todo) => ({ category: null, ...todo }));
   const listeners = new Set<(date: string) => void>();
@@ -51,6 +51,7 @@ function createMemoryRepository(seed: Todo[] = [], rejectUpdates = false, topics
       listeners.add(callback);
       return () => listeners.delete(callback);
     },
+    ...(timeEntries && { listTodoTimeEntries: async (id: string) => timeEntries[id] ?? [] }),
     listSuggestedTopics: async () => topics,
     getTopicContext: async (topicId) => {
       const topic = topics.find((value) => value.id === topicId);
@@ -100,20 +101,54 @@ async function bootstrap() {
     const [{ invoke }, { listen }] = await Promise.all([
       import("@tauri-apps/api/core"), import("@tauri-apps/api/event"),
     ]);
-    type ActiveTask = { title: string; revision: number };
+    const storage = createTauriSessionStorage(invoke);
+    const apiUrl = import.meta.env.VITE_FLOWCONTEXT_API_URL?.trim();
+    const repository = apiUrl ? new HttpFlowRepository({
+      baseUrl: apiUrl,
+      getAccessToken: () => storage.get(DEVICE_TOKEN_STORAGE_KEY),
+      getTimezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }) : null;
+    async function archive(todoId: string, entry: TodoTimeEntry) {
+      if (!repository) throw new Error("计时存档服务未配置");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12_000);
+      try {
+        await repository.saveTodoTimeEntry(todoId, entry, controller.signal);
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
     const timerRoot = createRoot(root);
-    const showTask = (task: ActiveTask) => timerRoot.render(
-      <TodoTimer key={task.revision} title={task.title} onClose={() => invoke("close_todo_timer")} />,
-    );
-    let receivedTask = false;
-    await listen<ActiveTask>("flowcontext:todo-timer-task", ({ payload }) => {
-      receivedTask = true;
-      showTask(payload);
+    let initialTask: TodoTimerTask | undefined;
+    let request: TodoTimerRequest | undefined;
+    let quitting = false;
+    const close = (revision: number) => invoke<boolean>("close_todo_timer", { revision });
+    const showTimer = () => {
+      if (initialTask) timerRoot.render(<TodoTimer initialTask={initialTask} request={request} archive={archive} onClose={close} />);
+    };
+    await listen<TodoTimerTask>("flowcontext:todo-timer-task", ({ payload }) => {
+      if (!initialTask) initialTask = payload;
+      else if (!quitting) request = { task: payload };
+      showTimer();
     });
-    const task = await invoke<ActiveTask | null>("read_todo_timer_task");
-    if (task && !receivedTask) showTask(task);
+    function requestClose(revision: number, exitRequested: boolean) {
+      if (quitting && !exitRequested) return;
+      quitting = exitRequested;
+      request = { close: true, revision };
+      showTimer();
+    }
+    await listen<{ revision: number; quitting: boolean }>("flowcontext:todo-timer-close-requested", ({ payload }) => {
+      requestClose(payload.revision, payload.quitting);
+    });
+    const snapshot = await invoke<{ task: TodoTimerTask; quitting: boolean } | null>("read_todo_timer_state");
+    if (snapshot) {
+      initialTask ??= snapshot.task;
+      if (snapshot.quitting && !quitting) requestClose(snapshot.task.revision, true);
+      else showTimer();
+    }
     return;
   }
+
   const provider = import.meta.env.VITE_FLOWCONTEXT_PROVIDER;
   let platform: Awaited<ReturnType<typeof createRuntimePlatform>>;
   try {
@@ -161,7 +196,12 @@ async function bootstrap() {
     createRoot(root).render(
       <App
         mode={e2eMode === "desktop-density" ? "desktop" : platform.mode}
-        repository={createMemoryRepository(seed, e2eMode === "network-failure", topics)}
+        repository={createMemoryRepository(seed, e2eMode === "network-failure", topics, e2eMode === "calendar-coverage" ? {
+          "calendar-7": [
+            { id: "10000000-0000-4000-8000-000000000001", startedAt: "2026-08-04T07:00:00.000Z", elapsedMs: 90_000 },
+            { id: "10000000-0000-4000-8000-000000000002", startedAt: "2026-08-04T06:00:00.000Z", elapsedMs: 45_000 },
+          ],
+        } : undefined)}
         platform={platform}
         expandedWeek={expandedWeek}
         auth={createE2eAuth()}

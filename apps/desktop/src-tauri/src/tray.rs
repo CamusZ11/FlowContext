@@ -49,6 +49,36 @@ impl TrayMenu {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) const APP_QUIT_MENU_ID: &str = "archive-application-quit";
+
+#[cfg(target_os = "macos")]
+pub(crate) fn macos_quit_menu(
+    app: &tauri::AppHandle,
+) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItemBuilder, MenuItemKind};
+
+    let menu = Menu::default(app)?;
+    // The default macOS application submenu is first and ends with its native Quit item.
+    let missing_quit = || std::io::Error::other("FlowContext 默认应用菜单缺少退出项");
+    let items = menu.items()?;
+    let application = items
+        .first()
+        .and_then(MenuItemKind::as_submenu)
+        .ok_or_else(missing_quit)?;
+    let items = application.items()?;
+    let old_quit = items
+        .last()
+        .and_then(MenuItemKind::as_predefined_menuitem)
+        .ok_or_else(missing_quit)?;
+    let quit = MenuItemBuilder::with_id(APP_QUIT_MENU_ID, old_quit.text()?)
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
+    application.remove(old_quit)?;
+    application.append(&quit)?;
+    Ok(menu)
+}
+
 pub fn install<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use tauri::menu::MenuItemBuilder;
     use tauri::tray::TrayIconBuilder;
@@ -85,15 +115,7 @@ pub fn install<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
                     let _ = window.emit("flowcontext:open-settings", ());
                 }
             }
-            "quit" => {
-                let runtime = app
-                    .try_state::<crate::DesktopRuntimeState>()
-                    .and_then(|state| state.0.lock().ok().and_then(|mut guard| guard.take()));
-                if let Some(runtime) = runtime {
-                    let _ = runtime.stop();
-                }
-                app.exit(0);
-            }
+            "quit" => app.exit(0),
             _ => {}
         });
     if let Some(icon) = app.default_window_icon().cloned() {

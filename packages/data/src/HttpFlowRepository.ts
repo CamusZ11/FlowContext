@@ -7,9 +7,10 @@ import type {
   Todo,
   TodoCreate,
   TodoPatch,
+  TodoTimeEntry,
   TopicCard,
 } from "@flowcontext/domain";
-import { todoCategorySchema } from "@flowcontext/domain";
+import { todoCategorySchema, todoTimeEntrySchema } from "@flowcontext/domain";
 import type { FlowRepository, TodoListener, TopicContext } from "./FlowRepository.ts";
 import {
   createHttpTransport,
@@ -443,6 +444,16 @@ export class HttpFlowRepository implements FlowRepository {
 
   async deleteTodo(id: string): Promise<void> {
     await this.transport.request<unknown>(`/v1/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  async listTodoTimeEntries(id: string, signal?: AbortSignal): Promise<TodoTimeEntry[]> {
+    const response = await this.transport.request<unknown>(`/v1/todos/${encodeURIComponent(id)}/time-entries`, { signal });
+    const parsed = todoTimeEntrySchema.array().safeParse(response);
+    return parsed.success ? parsed.data : invalid("invalid_response");
+  }
+
+  async saveTodoTimeEntry(id: string, entry: TodoTimeEntry, signal?: AbortSignal): Promise<void> {
+    await this.transport.request(`/v1/todos/${encodeURIComponent(id)}/time-entries`, { method: "POST", body: entry, signal });
   }
 
   async rolloverIncompleteTodos(fromDate: string, toDate: string): Promise<Todo[]> {

@@ -10,6 +10,7 @@ import type {
   Todo,
   TodoCreate,
   TodoPatch,
+  TodoTimeEntry,
   TopicCard,
 } from "@flowcontext/domain";
 import { todoCategorySchema } from "@flowcontext/domain";
@@ -40,6 +41,8 @@ export interface FlowDataRepository {
   createTodo(principal: Principal, input: TodoCreate): Promise<Todo>;
   updateTodo(principal: Principal, id: string, patch: TodoPatch): Promise<Todo | null>;
   deleteTodo(principal: Principal, id: string): Promise<Todo | null>;
+  listTodoTimeEntries(principal: Principal, todoId: string): Promise<TodoTimeEntry[] | null>;
+  saveTodoTimeEntry(principal: Principal, todoId: string, entry: TodoTimeEntry): Promise<boolean>;
   rolloverIncompleteTodos(principal: Principal, fromDate: string, toDate: string, timezone: string): Promise<Todo[]>;
   listSuggestedTopics(principal: Principal, limit: number): Promise<TopicCard[]>;
   getTopicContext(principal: Principal, topicId: string, deviceId?: string): Promise<TopicContext | null>;
@@ -313,6 +316,44 @@ export class PostgresFlowRepository extends PostgresAuthRepository implements Fl
     const todo = mapTodo(row);
     await this.publish(principal, todo.plannedDate, todo.id, "delete");
     return todo;
+  }
+
+  async listTodoTimeEntries(principal: Principal, todoId: string): Promise<TodoTimeEntry[] | null> {
+    const result = await this.flowPool.query<Row>(
+      `select entry.id, entry.started_at, entry.elapsed_ms
+       from todos as todo
+       left join todo_time_entries as entry on entry.owner_id = todo.owner_id and entry.todo_id = todo.id
+       where todo.owner_id = $1 and todo.id = $2
+       order by entry.started_at desc, entry.id`,
+      [principal.ownerId, todoId],
+    );
+    if (result.rows.length === 0) return null;
+    return result.rows.filter((row) => row.id !== null).map((row) => ({
+      id: stringValue(row, "id"),
+      startedAt: dateTimeValue(row, "started_at"),
+      elapsedMs: Number(stringValue(row, "elapsed_ms")),
+    }));
+  }
+
+  async saveTodoTimeEntry(principal: Principal, todoId: string, entry: TodoTimeEntry): Promise<boolean> {
+    try {
+      const saved = await queryOne(this.flowPool,
+        `insert into todo_time_entries as saved (owner_id, todo_id, id, started_at, elapsed_ms)
+         select owner_id, id, $3, $4, $5 from todos where owner_id = $1 and id = $2
+         on conflict (owner_id, id) do update set id = excluded.id
+         where saved.todo_id = excluded.todo_id and saved.started_at = excluded.started_at
+           and saved.elapsed_ms = excluded.elapsed_ms
+         returning id`,
+        [principal.ownerId, todoId, entry.id, entry.startedAt, entry.elapsedMs],
+      );
+      if (saved) return true;
+      const todo = await queryOne(this.flowPool, "select id from todos where owner_id = $1 and id = $2", [principal.ownerId, todoId]);
+      if (todo) throw new ApiError(409, "conflict");
+      return false;
+    } catch (error) {
+      if (isPostgresError(error) && error.code === "23503") return false;
+      translateDatabaseError(error);
+    }
   }
 
   async rolloverIncompleteTodos(

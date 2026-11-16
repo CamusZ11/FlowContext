@@ -1,12 +1,14 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Todo, TodoCreate, TodoPatch } from "@flowcontext/domain";
 import { usePlatform } from "../../app/PlatformContext";
+import { useFlowRepository } from "../../app/RepositoryContext";
 import { CompletedTodos } from "./CompletedTodos";
 import { TodoForm } from "./TodoForm";
 import { TodoRow } from "./TodoRow";
 import { useTodoMutations, useTodos } from "./useTodos";
 import { DateSelector } from "../calendar/DateSelector";
 import { TodoCalendar } from "./TodoCalendar";
+import { TodoTimeHistory } from "./TodoTimeHistory";
 import "./todo.css";
 
 type TodoView = "list" | "calendar";
@@ -29,6 +31,7 @@ export interface TodoSectionProps {
 
 export function TodoSection({ date, rolloverIdentity, onDateChange, expandedWeek = false }: TodoSectionProps) {
   const platform = usePlatform();
+  const repository = useFlowRepository();
   const { startTodoTimer } = platform;
   const [view, setView] = useState(readTodoView);
   const [slot, setSlot] = useState<{ date: string; time: string }>();
@@ -36,6 +39,9 @@ export function TodoSection({ date, rolloverIdentity, onDateChange, expandedWeek
   const [openingWeek, setOpeningWeek] = useState(false);
   const [weekError, setWeekError] = useState(false);
   const [timerError, setTimerError] = useState(false);
+  const [historyTask, setHistoryTask] = useState<Todo>();
+  const listTimeEntries = repository.listTodoTimeEntries;
+  const openHistory = listTimeEntries ? setHistoryTask : undefined;
   const query = useTodos(date, rolloverIdentity);
   const mutations = useTodoMutations(date);
   const todos = query.data ?? [];
@@ -135,6 +141,7 @@ export function TodoSection({ date, rolloverIdentity, onDateChange, expandedWeek
           date={date} today={platform.today()} todos={todos} busy={mutationBusy}
           expandedWeek={expandedWeek} openingWeek={openingWeek} onOpenWeek={expandedWeek ? undefined : openWeek}
           onStartTimer={startTimer}
+          onOpenTimeHistory={openHistory}
           onDateChange={changeDate} onSelectSlot={selectSlot} onUpdate={updateFromCalendar}
         />
       ) : (
@@ -147,15 +154,19 @@ export function TodoSection({ date, rolloverIdentity, onDateChange, expandedWeek
                 onUpdate={(patch) => update(todo.id, patch)}
                 onDelete={() => remove(todo.id)}
                 onStartTimer={startTimer}
+                onOpenTimeHistory={openHistory}
                 disabled={mutationBusy}
               />
             ))}
           </ul>
-          <CompletedTodos todos={completedTodos} onUpdate={update} onDelete={remove} onStartTimer={startTimer} disabled={mutationBusy} />
+          <CompletedTodos todos={completedTodos} onUpdate={update} onDelete={remove} onStartTimer={startTimer}
+            onOpenTimeHistory={openHistory} disabled={mutationBusy} />
           {!query.isPending && todos.length === 0 ? <p className="empty-state">这一天还没有安排</p> : null}
         </>
       )}
       {weekDate && <WeekDialog date={weekDate} rolloverIdentity={rolloverIdentity} onDateChange={setWeekDate} onClose={() => setWeekDate(undefined)} />}
+      {historyTask && listTimeEntries && <TodoTimeHistory todo={historyTask}
+        load={(id, signal) => listTimeEntries.call(repository, id, signal)} onClose={() => setHistoryTask(undefined)} />}
     </section>
   );
 }

@@ -122,12 +122,13 @@ interface TodoCalendarProps {
   openingWeek: boolean;
   onOpenWeek?(): void;
   onStartTimer?(todo: Todo): void;
+  onOpenTimeHistory?(todo: Todo): void;
   onDateChange(date: string): void;
   onSelectSlot(date: string, time: string): void;
   onUpdate(todo: Todo, patch: TodoPatch): Promise<void>;
 }
 
-export function TodoCalendar({ date, today, todos, busy, expandedWeek, openingWeek, onOpenWeek, onStartTimer, onDateChange, onSelectSlot, onUpdate }: TodoCalendarProps) {
+export function TodoCalendar({ date, today, todos, busy, expandedWeek, openingWeek, onOpenWeek, onStartTimer, onOpenTimeHistory, onDateChange, onSelectSlot, onUpdate }: TodoCalendarProps) {
   const wideViewport = useSyncExternalStore(subscribeToWidth, isWeekWidth);
   const showWeek = expandedWeek || wideViewport;
   const weekday = (localDate(date).getDay() + 6) % 7;
@@ -321,6 +322,7 @@ export function TodoCalendar({ date, today, todos, busy, expandedWeek, openingWe
               {TODO_CATEGORIES.map((category) => <option key={category} value={category}>{categoryLabels[category]}</option>)}
             </select>
           )}
+          {onOpenTimeHistory && <button type="button" onClick={() => onOpenTimeHistory(editing)}>计时记录</button>}
         </form>
       )}
       <div className="todo-calendar-grid-scroll">

@@ -13,6 +13,9 @@
 .todo-timer[data-paused="true"] .todo-timer-indicator { background: #aeb2bb; }
 .todo-timer-readout { display: grid; flex: 1; min-width: 0; gap: 1px; }
 .todo-timer-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; color: #c2c6ce; }
+.todo-timer-time { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.todo-timer-time :is([role="status"], [role="alert"]) { font-size: 0.65rem; }
+.todo-timer-time [role="alert"] { color: #ffc2a8; }
 .todo-timer [role="timer"] {
   line-height: 1;
   font-size: 1.15rem;

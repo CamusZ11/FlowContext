@@ -225,4 +225,4 @@ button.todo-calendar-date:hover:not(:disabled) { background: #eef4fd; transform:
 @media (min-width: 860px) { .todo-calendar-task time { position: absolute; clip-path: inset(50%); } }
 .todo-calendar-editor { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 0.4rem; }
 .todo-calendar-editor span { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
-.todo-calendar-editor :is(input, select) { padding: 0.24rem 0.34rem; border-radius: 7px; font-size: 0.75rem; }
+.todo-calendar-editor :is(input, select, button) { padding: 0.24rem 0.34rem; border-radius: 7px; font-size: 0.75rem; }

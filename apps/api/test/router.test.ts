@@ -14,6 +14,7 @@ class FakeRepository {
   readonly token = randomBytes(32).toString("base64url");
   readonly calls: string[] = [];
   conflict = false;
+  timeEntries: unknown[] = [];
   lastSessionInput: Record<string, unknown> | null = null;
 
   async findEnrollment() { return null; }
@@ -32,6 +33,12 @@ class FakeRepository {
   }
   async updateTodo() { this.calls.push("updateTodo"); return null; }
   async deleteTodo() { this.calls.push("deleteTodo"); return null; }
+  async listTodoTimeEntries(_principal: unknown, todoId: string) { return todoId === unknownTodoId ? this.timeEntries : null; }
+  async saveTodoTimeEntry(_principal: unknown, todoId: string, entry: unknown) {
+    if (todoId !== unknownTodoId) return false;
+    this.timeEntries.push(entry);
+    return true;
+  }
   async rolloverIncompleteTodos(_principal?: unknown, fromDate?: string, toDate?: string, timezone?: string) {
     this.calls.push(`rollover:${fromDate}:${toDate}:${timezone}`);
     return [];
@@ -94,6 +101,19 @@ describe("FlowContext REST API", () => {
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({ platform: "windows", workspacePath: "F:/FlowContext" });
     expect(repository.lastSessionInput).toMatchObject({ platform: "windows" });
+    await app.close();
+  });
+
+  it("accepts authenticated timer records and rejects malformed durations", async () => {
+    const { app, repository } = createApp();
+    const url = `/v1/todos/${unknownTodoId}/time-entries`;
+    const headers = auth(repository);
+    const payload = { id: deviceId, startedAt: "2026-08-05T08:00:00.000Z", elapsedMs: 4500 };
+    expect((await app.inject({ url })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...payload, elapsedMs: -1 } })).statusCode).toBe(422);
+    expect((await app.inject({ method: "POST", url, headers, payload })).statusCode).toBe(204);
+    expect((await app.inject({ url, headers })).json()).toEqual([payload]);
+    expect((await app.inject({ url: `/v1/todos/${deviceId}/time-entries`, headers })).statusCode).toBe(404);
     await app.close();
   });
 

@@ -9,6 +9,7 @@ use tauri::{
 
 const LABEL: &str = "todo-timer";
 const TASK_EVENT: &str = "flowcontext:todo-timer-task";
+const CLOSE_EVENT: &str = "flowcontext:todo-timer-close-requested";
 const WIDTH: f64 = 268.0;
 const HEIGHT: f64 = 52.0;
 
@@ -16,7 +17,13 @@ const HEIGHT: f64 = 52.0;
 pub(crate) struct TimerWindowState {
     lifecycle: tauri::async_runtime::Mutex<()>,
     destroyed: Mutex<Option<mpsc::SyncSender<()>>>,
-    task: Mutex<Option<ActiveTask>>,
+    session: Mutex<TimerSession>,
+}
+
+#[derive(Default)]
+struct TimerSession {
+    task: Option<ActiveTask>,
+    exit_code: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -30,6 +37,18 @@ pub(crate) struct ActiveTask {
     id: String,
     title: String,
     revision: u64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct TimerSnapshot {
+    task: ActiveTask,
+    quitting: bool,
+}
+
+#[derive(Clone, Serialize)]
+struct CloseRequest {
+    revision: u64,
+    quitting: bool,
 }
 
 #[tauri::command]
@@ -53,12 +72,17 @@ pub(crate) async fn start_todo_timer(
         .ok_or_else(|| "没有可用的显示器".to_owned())?;
 
     let existing = app.get_webview_window(LABEL);
+    let was_open = existing.is_some();
     let active = {
-        let mut current = state.task.lock().unwrap();
+        let mut session = state.session.lock().unwrap();
+        if session.exit_code.is_some() {
+            return Err("正在保存计时并退出".into());
+        }
         let revision = if existing.is_some() {
-            current.as_ref().map_or(0, |previous| {
-                previous.revision + u64::from(previous.id != task.id)
-            })
+            session
+                .task
+                .as_ref()
+                .map_or(0, |previous| previous.revision + 1)
         } else {
             0
         };
@@ -67,7 +91,9 @@ pub(crate) async fn start_todo_timer(
             title: task.title.chars().take(200).collect(),
             revision,
         };
-        *current = Some(active.clone());
+        if !was_open {
+            session.task = Some(active.clone());
+        }
         active
     };
     let timer = if let Some(existing) = existing {
@@ -100,24 +126,36 @@ pub(crate) async fn start_todo_timer(
         .recv()
         .await
         .ok_or_else(|| "计时窗口不可用".to_owned())?;
-    if result.is_err() {
+    if result.is_err() && !was_open {
         let _ = destroy_timer(&timer, &state).await;
     }
     result?;
+    let mut session = state.session.lock().unwrap();
+    if session.exit_code.is_some() {
+        return Err("正在保存计时并退出".into());
+    }
+    if was_open {
+        session.task = Some(active.clone());
+    }
+    drop(session);
     timer
         .emit_to(LABEL, TASK_EVENT, active)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub(crate) fn read_todo_timer_task(
+pub(crate) fn read_todo_timer_state(
     window: WebviewWindow,
     state: tauri::State<'_, TimerWindowState>,
-) -> Option<ActiveTask> {
+) -> Option<TimerSnapshot> {
     if window.label() != LABEL {
         return None;
     }
-    state.task.lock().unwrap().clone()
+    let session = state.session.lock().unwrap();
+    session.task.clone().map(|task| TimerSnapshot {
+        task,
+        quitting: session.exit_code.is_some(),
+    })
 }
 
 fn place_and_show(window: &WebviewWindow, monitor: &tauri::Monitor) -> Result<(), String> {
@@ -145,12 +183,28 @@ fn place_and_show(window: &WebviewWindow, monitor: &tauri::Monitor) -> Result<()
 pub(crate) async fn close_todo_timer(
     window: WebviewWindow,
     state: tauri::State<'_, TimerWindowState>,
-) -> Result<(), String> {
+    revision: u64,
+) -> Result<bool, String> {
     if window.label() != LABEL {
         return Err("计时窗口不可用".into());
     }
     let _lifecycle = state.lifecycle.lock().await;
-    destroy_timer(&window, &state).await
+    if !state
+        .session
+        .lock()
+        .unwrap()
+        .task
+        .as_ref()
+        .is_some_and(|task| task.revision == revision)
+    {
+        return Ok(false);
+    }
+    destroy_timer(&window, &state).await?;
+    let exit_code = state.session.lock().unwrap().exit_code;
+    if let Some(code) = exit_code {
+        window.app_handle().exit(code);
+    }
+    Ok(true)
 }
 
 async fn destroy_timer(window: &WebviewWindow, state: &TimerWindowState) -> Result<(), String> {
@@ -170,20 +224,56 @@ async fn destroy_timer(window: &WebviewWindow, state: &TimerWindowState) -> Resu
 }
 
 pub(crate) fn handle_event(app: &tauri::AppHandle, event: RunEvent) {
-    if let RunEvent::WindowEvent {
-        label,
-        event: WindowEvent::Destroyed,
-        ..
-    } = event
-    {
-        // Tauri has already removed the window's label when this callback runs.
-        if label == LABEL {
-            let state = app.state::<TimerWindowState>();
-            state.task.lock().unwrap().take();
+    let state = app.state::<TimerWindowState>();
+    match event {
+        RunEvent::ExitRequested { api, code, .. } if code != Some(tauri::RESTART_EXIT_CODE) => {
+            let Some(timer) = app.get_webview_window(LABEL) else {
+                return;
+            };
+            let request = {
+                let mut session = state.session.lock().unwrap();
+                let Some(task) = &session.task else {
+                    return;
+                };
+                let revision = task.revision;
+                session.exit_code.get_or_insert(code.unwrap_or_default());
+                CloseRequest {
+                    revision,
+                    quitting: true,
+                }
+            };
+            api.prevent_exit();
+            let _ = timer.emit_to(LABEL, CLOSE_EVENT, request);
+        }
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::CloseRequested { api, .. },
+            ..
+        } if label == LABEL => {
+            api.prevent_close();
+            let request = {
+                let session = state.session.lock().unwrap();
+                session.task.as_ref().map(|task| CloseRequest {
+                    revision: task.revision,
+                    quitting: session.exit_code.is_some(),
+                })
+            };
+            if let Some(request) = request {
+                let _ = app.emit_to(LABEL, CLOSE_EVENT, request);
+            }
+        }
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Destroyed,
+            ..
+        } if label == LABEL => {
+            // Tauri has already removed the window's label when this callback runs.
+            state.session.lock().unwrap().task.take();
             let pending_close = state.destroyed.lock().unwrap().take();
             if let Some(send) = pending_close {
                 let _ = send.try_send(());
             }
         }
+        _ => {}
     }
 }

@@ -73,3 +73,15 @@ test("Windows CI uses the pinned MSVC toolchain and uploads redacted smoke evide
   assert.match(workflow, /ci-mock-launcher/);
   assert.match(workflow, /artifacts-smoke\.redacted\.log/);
 });
+
+test("app and tray quit share the timer archive exit path", async () => {
+  const startup = await readFile(new URL("./src-tauri/src/lib.rs", import.meta.url), "utf8");
+  const timer = await readFile(new URL("./src-tauri/src/todo_timer.rs", import.meta.url), "utf8");
+  const tray = await readFile(new URL("./src-tauri/src/tray.rs", import.meta.url), "utf8");
+
+  assert.match(startup, /\.menu\(tray::macos_quit_menu\)/);
+  assert.match(tray, /accelerator\("CmdOrCtrl\+Q"\)/);
+  assert.match(tray, /"quit" => app\.exit\(0\)/);
+  assert.match(timer, /RunEvent::ExitRequested[\s\S]*api\.prevent_exit\(\)/);
+  assert.match(timer, /destroy_timer\(&window, &state\)\.await\?;[\s\S]*\.exit\(code\)/);
+});

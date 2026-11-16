@@ -39,6 +39,7 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
       "005_prebound_device_enrollments.sql",
       "008_todo_end_time.sql",
       "009_todo_category.sql",
+      "010_todo_time_entries.sql",
     ]);
     repository = new PostgresFlowRepository(pool);
   });
@@ -145,6 +146,23 @@ describe.runIf(enabled)("PostgresFlowRepository against disposable PostgreSQL", 
     await expect(repository.updateTodo(owner, todo.id, { category: null }))
       .resolves.toMatchObject({ category: null, isCompleted: true });
     await expect(repository.listTodos(owner, "2026-08-06")).resolves.toMatchObject([{ category: null }]);
+  });
+
+  it("archives immutable timer entries once, scoped to the task owner", async () => {
+    const todo = await repository.createTodo(owner, {
+      title: "timed task", plannedDate: "2026-08-05", plannedTime: null, isCompleted: false,
+    });
+    const entry = { id: projectId, startedAt: "2026-08-05T08:00:00.000Z", elapsedMs: 125_678 };
+    await expect(repository.listTodoTimeEntries(owner, todo.id)).resolves.toEqual([]);
+    await expect(repository.saveTodoTimeEntry(otherOwner, todo.id, entry)).resolves.toBe(false);
+    await expect(repository.saveTodoTimeEntry(owner, todo.id, entry)).resolves.toBe(true);
+    await expect(repository.saveTodoTimeEntry(owner, todo.id, entry)).resolves.toBe(true);
+    await expect(repository.saveTodoTimeEntry(owner, todo.id, { ...entry, elapsedMs: 1 })).rejects.toMatchObject({ statusCode: 409 });
+    await expect(repository.listTodoTimeEntries(otherOwner, todo.id)).resolves.toBeNull();
+    await expect(repository.listTodoTimeEntries(owner, todo.id)).resolves.toEqual([entry]);
+    await repository.deleteTodo(owner, todo.id);
+    await expect(repository.listTodoTimeEntries(owner, todo.id)).resolves.toBeNull();
+    expect((await pool.query("select id from todo_time_entries where todo_id = $1", [todo.id])).rowCount).toBe(0);
   });
 
   it("rolls back the immutable Handoff when the Topic continuity update fails", async () => {

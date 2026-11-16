@@ -10,6 +10,7 @@ export function PencilIcon(props: IconProps) { return <Icon {...props}><path d="
 export function TrashIcon(props: IconProps) { return <Icon {...props}><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5" /></Icon>; }
 export function PlusIcon(props: IconProps) { return <Icon {...props}><path d="M12 5v14M5 12h14" /></Icon>; }
 export function ClockIcon(props: IconProps) { return <Icon {...props}><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></Icon>; }
+export function HistoryIcon(props: IconProps) { return <Icon {...props}><path d="M3 12a9 9 0 1 1 2.6 6.4M3 6v6h6m3-5v5l3 2" /></Icon>; }
 export function CheckIcon(props: IconProps) { return <Icon {...props}><path d="m5 12 4.2 4.2L19 6.5" /></Icon>; }
 export function ArrowRightIcon(props: IconProps) { return <Icon {...props}><path d="M5 12h14m-6-6 6 6-6 6" /></Icon>; }
 export function SyncIcon(props: IconProps) { return <Icon {...props}><path d="M20 12a8 8 0 0 0-14.6-4.6M4 12a8 8 0 0 0 14.6 4.6M5.4 4.8v3.4h3.4m4.2 7.6v3.4h3.4" /></Icon>; }

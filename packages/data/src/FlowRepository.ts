@@ -6,6 +6,7 @@ import type {
   Todo,
   TodoCreate,
   TodoPatch,
+  TodoTimeEntry,
   TopicCard,
 } from "@flowcontext/domain";
 
@@ -33,6 +34,7 @@ export interface FlowRepository {
   createTodo(input: TodoCreate): Promise<Todo>;
   updateTodo(id: string, patch: TodoPatch): Promise<Todo>;
   deleteTodo(id: string): Promise<void>;
+  listTodoTimeEntries?(id: string, signal?: AbortSignal): Promise<TodoTimeEntry[]>;
   rolloverIncompleteTodos(fromDate: string, toDate: string): Promise<Todo[]>;
   subscribeTodos(date: string, listener: TodoListener): TodoSubscriptionCleanup;
   listSuggestedTopics(limit: number): Promise<TopicCard[]>;

@@ -80,6 +80,12 @@ export type TodoCreate = Omit<Todo, "id">;
 
 export type TodoPatch = Partial<TodoCreate>;
 
+export interface TodoTimeEntry {
+  id: string;
+  startedAt: string;
+  elapsedMs: number;
+}
+
 export interface DailyProjection {
   date: string;
   dailyLens: string;

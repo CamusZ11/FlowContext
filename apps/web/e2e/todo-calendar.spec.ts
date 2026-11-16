@@ -244,6 +244,24 @@ test("automatically saves the end time and date when leaving the edited field", 
   await expect(card).toContainText("14:00–16:45");
 });
 
+test("shows the task's archived timers and total in the calendar and list", async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 900 });
+  await page.goto("/?e2e=calendar-coverage&date=2026-08-04");
+  await page.getByRole("button", { name: "计时记录 整理材料" }).click();
+  const history = page.getByRole("dialog", { name: "计时记录" });
+  await expect(history.getByText("累计耗时")).toBeVisible();
+  await expect(history.getByText("02:15")).toBeVisible();
+  await expect(history.getByRole("listitem")).toHaveCount(2);
+  await expect(history.getByText("01:30")).toBeVisible();
+  await expect(history.getByText("00:45")).toBeVisible();
+  await history.getByRole("button", { name: "关闭" }).click();
+
+  await page.getByRole("button", { name: "日历", exact: true }).click();
+  await page.getByRole("button", { name: /整理材料/ }).click();
+  await page.getByRole("button", { name: "计时记录", exact: true }).click();
+  await expect(history.getByText("02:15")).toBeVisible();
+});
+
 test("leaves a small gap between back-to-back calendar tasks", async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   await page.goto("/?e2e=calendar-coverage&date=2026-08-04");

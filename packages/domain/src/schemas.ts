@@ -112,6 +112,12 @@ export const handoffCreateSchema = z
 
 export const todoCategorySchema = z.enum(TODO_CATEGORIES).nullable();
 
+export const todoTimeEntrySchema = z.object({
+  id: z.string().uuid(),
+  startedAt: dateTimeSchema.refine((value) => isCalendarDate(value.slice(0, 10)), "invalid calendar date"),
+  elapsedMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+}).strict();
+
 export const todoSchema = z
   .object({
     id: idSchema,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Todo, TodoPatch } from "@flowcontext/domain";
-import { PencilIcon, TrashIcon } from "../../ui/icons";
+import { HistoryIcon, PencilIcon, TrashIcon } from "../../ui/icons";
 import { TodoTimerButton } from "./TodoTimer";
 
 export interface TodoRowProps {
@@ -8,10 +8,11 @@ export interface TodoRowProps {
   onUpdate(patch: TodoPatch): Promise<void>;
   onDelete(): Promise<void>;
   onStartTimer?(todo: Todo): void;
+  onOpenTimeHistory?(todo: Todo): void;
   disabled?: boolean;
 }
 
-export function TodoRow({ todo, onUpdate, onDelete, onStartTimer, disabled = false }: TodoRowProps) {
+export function TodoRow({ todo, onUpdate, onDelete, onStartTimer, onOpenTimeHistory, disabled = false }: TodoRowProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(todo.title);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +75,8 @@ export function TodoRow({ todo, onUpdate, onDelete, onStartTimer, disabled = fal
       </div>
       <div className="todo-row-actions">
         {onStartTimer && <TodoTimerButton title={todo.title} onClick={() => onStartTimer(todo)} />}
+        {onOpenTimeHistory && <button type="button" data-icon-button="true" aria-label={`计时记录 ${todo.title}`} title="计时记录"
+          onClick={() => onOpenTimeHistory(todo)}><HistoryIcon width={16} height={16} /></button>}
         <button type="button" data-icon-button="true" aria-label={`编辑 ${todo.title}`} onClick={() => setEditing(true)} disabled={disabled || busy}>
           <PencilIcon width="18" height="18" />
         </button>

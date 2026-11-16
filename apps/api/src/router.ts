@@ -7,7 +7,7 @@ import type {
   TodoCreate,
   TodoPatch,
 } from "@flowcontext/domain";
-import { todoCategorySchema } from "@flowcontext/domain";
+import { todoCategorySchema, todoTimeEntrySchema } from "@flowcontext/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { Principal } from "./auth.js";
@@ -303,6 +303,23 @@ function registerTodoRoutes(app: FastifyInstance, repository: FlowDataRepository
   app.delete("/v1/todos/:id", async (request, reply) => {
     const id = todoResourceId(pathParameters(request).id);
     found(await repository.deleteTodo(principal(request), id));
+    return reply.status(204).send();
+  });
+
+  app.get("/v1/todos/:id/time-entries", async (request, reply) => {
+    const id = todoResourceId(pathParameters(request).id);
+    const entries = await repository.listTodoTimeEntries(principal(request), id);
+    if (!entries) throw new ApiError(404, "todo_not_found");
+    return reply.header("cache-control", "no-store").send(entries);
+  });
+
+  app.post("/v1/todos/:id/time-entries", async (request, reply) => {
+    const id = todoResourceId(pathParameters(request).id);
+    const parsed = todoTimeEntrySchema.safeParse(request.body);
+    if (!parsed.success) throw invalidRequest();
+    if (!await repository.saveTodoTimeEntry(principal(request), id, parsed.data)) {
+      throw new ApiError(404, "todo_not_found");
+    }
     return reply.status(204).send();
   });
 

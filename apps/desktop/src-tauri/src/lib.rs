@@ -64,6 +64,14 @@ pub fn run() {
         .build();
 
     let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(tray::macos_quit_menu)
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == tray::APP_QUIT_MENU_ID {
+                app.exit(0);
+            }
+        });
 
     builder
         .manage(todo_timer::TimerWindowState::default())
@@ -72,7 +80,7 @@ pub fn run() {
             settings::get_device_settings,
             settings::set_device_settings,
             todo_timer::start_todo_timer,
-            todo_timer::read_todo_timer_task,
+            todo_timer::read_todo_timer_state,
             todo_timer::close_todo_timer,
             todo_week::open_todo_week,
             todo_week::todo_week_ready,
@@ -147,5 +155,15 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building FlowContext desktop application")
-        .run(todo_timer::handle_event);
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(runtime) = app
+                    .try_state::<DesktopRuntimeState>()
+                    .and_then(|state| state.0.lock().ok().and_then(|mut guard| guard.take()))
+                {
+                    runtime.retire();
+                }
+            }
+            todo_timer::handle_event(app, event);
+        });
 }
